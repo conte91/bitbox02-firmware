@@ -168,6 +168,11 @@ static void _msg(const Packet* in_packet, Packet* out_packet, const size_t max_o
     }
 }
 
+void hww_process(void)
+{
+    /* Nothing to do here. */
+}
+
 void hww_setup(void)
 {
     const CMD_Callback hww_cmd_callbacks[] = {{HWW_MSG, _msg}};

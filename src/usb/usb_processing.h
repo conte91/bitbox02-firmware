@@ -64,5 +64,4 @@ struct usb_processing* usb_processing_u2f(void);
 struct usb_processing* usb_processing_hww(void);
 
 void usb_processing_init(void);
-
 #endif

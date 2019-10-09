@@ -17,4 +17,8 @@
 
 void u2f_device_setup(void);
 
+/**
+ * Called at every event loop to manage the U2F stack.
+ */
+void u2f_process(void);
 #endif

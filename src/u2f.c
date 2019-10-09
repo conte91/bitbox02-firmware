@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <hardfault.h>
 #include <keystore.h>
 #include <memory/memory.h>
 #include <random.h>
@@ -591,6 +592,11 @@ static void _cmd_msg(const Packet* in_packet, Packet* out_packet, const size_t m
         _error(U2F_SW_INS_NOT_SUPPORTED, out_packet);
         return;
     }
+}
+
+void u2f_process(void)
+{
+    /** Nothing to do here. */
 }
 
 /**
