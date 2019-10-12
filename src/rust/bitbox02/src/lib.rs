@@ -17,6 +17,8 @@ use bitbox02_sys::{self, delay_ms, delay_us};
 use core::alloc::{GlobalAlloc, Layout};
 use core::time::Duration;
 
+//use once_cell::unsync::{Lazy, OnceCell};
+
 // Since we don't have a complete stdlib but have a heap we implement a global allocator using
 // malloc and free.
 extern "C" {
@@ -102,3 +104,69 @@ pub fn workflow_confirm(title: &str, body: &str, longtouch: bool, accept_only: b
         )
     }
 }
+
+//unsafe extern "C" fn bbb_cleanup(_component: *mut bitbox02_sys::component_t) {
+//}
+//unsafe extern "C" fn bbb_render(component: *mut bitbox02_sys::component_t) {
+//    let comp: &mut BgComponent = ((*component).data as *mut BgComponent).as_mut().unwrap();
+//    comp.render();
+//}
+//unsafe extern "C" fn bbb_on_event(_event: *const bitbox02_sys::event_t, _component: *mut bitbox02_sys::component_t) {
+//}
+//
+//pub struct BgComponent {
+//    counter: u32,
+//}
+//
+//static mut BG_COMPONENT: Option<Component<BgComponent>> = None;
+//
+//pub fn bitboxbase_loading_screen_push() {
+//    use bitbox02_sys::{component_t, component_functions_t, dimension_t, position_t, sub_components_t};
+//
+//    unsafe {
+//        BG_COMPONENT = Some(
+//            Component {
+//                component_c: component_t {
+//                    f: core::ptr::null_mut(),
+//                    dimension: dimension_t {width: 128, height: 64},
+//                    position: position_t {left: 0, top: 0},
+//                    data: core::ptr::null_mut(),
+//                    sub_components: sub_components_t {amount: 0, sub_components: [core::ptr::null_mut(); 35]},
+//                    parent: core::ptr::null_mut(),
+//                    emit_without_release: false,
+//                },
+//                functions: component_functions_t {
+//                    cleanup: Some(bbb_cleanup),
+//                    render: Some(bbb_render),
+//                    on_event: Some(bbb_on_event),
+//                },
+//                component: BgComponent {counter: 0},
+//            });
+//        let bg_comp = BG_COMPONENT.as_mut().unwrap();
+//        bg_comp.component_c.f = &mut bg_comp.functions;
+//        let ptr: *mut BgComponent = &mut bg_comp.component;
+//        bg_comp.component_c.data = ptr as _;
+//
+//        bitbox02_sys::ui_screen_stack_push(&(bg_comp.component_c) as *const _);
+//    }
+//}
+//
+//trait Renderable {
+//    fn render(&mut self);
+//}
+//
+//struct Component<T:Renderable> {
+//    component_c: bitbox02_sys::component_t,
+//    functions: bitbox02_sys::component_functions_t,
+//    component: T
+//}
+//
+//impl Renderable for BgComponent {
+//    fn render(&mut self) {
+//        unsafe {
+//        ug_put_string(0, 0, "hejhej", false);
+//        delay_ms(1500);
+//
+//        }
+//    }
+//}

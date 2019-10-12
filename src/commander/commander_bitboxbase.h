@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <hal_delay.h>
-#include <ui/fonts/arial_fonts.h>
-#include <ui/oled/oled.h>
-#include <ui/ugui/ugui.h>
-#include <ui/screen_stack.h>
-#include <workflow/confirm.h>
-#include <ui/components/label.h>
+#include "commander.h"
+#include "hww.pb.h"
+
+commander_error_t commander_bitboxbase(const BitBoxBaseRequest* request);
