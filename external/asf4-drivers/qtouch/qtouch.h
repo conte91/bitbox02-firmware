@@ -136,35 +136,35 @@ extern "C" {
     // 0..3 higher Slider left to right 4..7 lower Slider right to left
 #define KEY_0_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_1_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_2_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_3_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_4_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                  \
+        16, HYST_25, NO_AKS_GROUP                                                                                  \
     }
 #define KEY_5_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_6_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 #define KEY_7_PARAMS                                                                                                   \
     {                                                                                                                  \
-        16, HYST_50, NO_AKS_GROUP                                                                                    \
+        16, HYST_25, NO_AKS_GROUP                                                                                    \
     }
 
 /* De-bounce counter for additional measurements to confirm touch detection
@@ -242,7 +242,9 @@ extern "C" {
 #define DEF_NUM_SCROLLERS              2// Number of scrollers (sliders or wheels)
 #define DEF_SCROLLER_NUM_CHANNELS   (DEF_NUM_CHANNELS / DEF_NUM_SCROLLERS)// Assumes same number for each scroller
 #define DEF_SCROLLER_RESOLUTION      256// Scroller resolution in bits
-#define DEF_SCROLLER_DET_THRESHOLD    32// Scroller detect threshold
+#define DEF_SCROLLER_DET_THRESHOLD    25// Scroller detect threshold
+#define DEF_SCROLLER_TOUCH_THRESHOLD    60 // Scroller active threshold
+#define DEF_SCROLLER_SIDE_AMPLIFICATION 220 // Amplification factor for side channels
 #define DEF_SCROLLER_DEADBAND         13// 13 bits = 5% of 256-bit range
 #define DEF_SCROLLER_OFFSET_0          4// Index of first button in scroller
 #define DEF_SCROLLER_OFFSET_1          0// Index of first button in scroller

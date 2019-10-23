@@ -49,4 +49,6 @@ typedef struct {
  */
 void gestures_detect(bool reset, bool emit_without_release);
 
+extern const char* last_event;
+
 #endif

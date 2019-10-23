@@ -31,6 +31,7 @@ Copyright (c) 2017 Microchip. All rights reserved.
 #include "touch_api_ptc.h"
 #include "license.h"
 
+#include <stdlib.h>
 /*----------------------------------------------------------------------------
  *   prototypes
  *----------------------------------------------------------------------------*/
@@ -573,6 +574,15 @@ uint16_t qtouch_get_scroller_position(uint16_t scroller)
     return scroller_position[scroller];
 }
 
+#ifdef SAVE_READINGS
+extern uint16_t last_reading[2];
+extern uint16_t max_reading[2];
+extern uint16_t adj_reading[2];
+extern uint16_t glob_x[2];
+extern uint16_t glob_y[2];
+#endif
+
+//uint16_t loop_max_pressure = 0;
 void qtouch_process_scroller_positions(void)
 {
     uint8_t scroller;
@@ -604,32 +614,88 @@ void qtouch_process_scroller_positions(void)
 
         // Calculate scroller position using a moving average
         // The moving average wieghts previous N readings twice current reading
+        uint16_t estimated_scroller_position;
         if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
             uint16_t moving_average_cummulative_weight = 0;
-            scroller_position[scroller] = 0;
+            estimated_scroller_position = 0;
             for (j = 0; j < DEF_SCROLLER_NUM_PREV_POS; j++) {
                 if (scroller_previous_position[scroller][j] != DEF_SCROLLER_OFF) {
                     moving_average_cummulative_weight += 2;
-                    scroller_position[scroller] += scroller_previous_position[scroller][j] * 2;
+                    estimated_scroller_position += scroller_previous_position[scroller][j] * 2;
                 }
             }
-            scroller_position[scroller] += scaled_value;// Most recent signal is half weight of others to help avoid bounce when finger is released
-            scroller_position[scroller] = scroller_position[scroller] / (moving_average_cummulative_weight + 1);
+            estimated_scroller_position += scaled_value;// Most recent signal is half weight of others to help avoid bounce when finger is released
+            estimated_scroller_position = estimated_scroller_position / (moving_average_cummulative_weight + 1);
+        } else {
+            estimated_scroller_position = 0;
+        }
+
+        // Position-independent pressure estimation.
+        // Work in fix-point, we don't really want to use float divisions here...
+        uint16_t adjusted_touch_pressure;
+        /*
+         * Fit a parabola to adjust the estimated touch pressure.
+         * The parabola should pass from (0, 256), ((RESOLUTION/2), 0), (RESOLUTION, 256).
+         * Use this to compute an adjustment factor f in [0,1] for the pressure estimation:
+         * pressure = sum * (1 + f).
+         */
+        if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
+            int32_t x = estimated_scroller_position;
+            /*
+             * The fitting parabola is y = (4 * 256 / r^2)x^2 - (4 * 256 / r)x + 256.
+             * Do multiplications first to avoid truncating the result...
+             */
+            int32_t y = 4 * DEF_SCROLLER_SIDE_AMPLIFICATION * x * x / (DEF_SCROLLER_RESOLUTION * DEF_SCROLLER_RESOLUTION) - 4 * DEF_SCROLLER_SIDE_AMPLIFICATION * x / DEF_SCROLLER_RESOLUTION + DEF_SCROLLER_SIDE_AMPLIFICATION;
+#ifdef SAVE_READINGS
+            glob_x[scroller] = x;
+            glob_y[scroller] = y;
+#endif
+            // Adjust the parameter by (256 + y) / 256 - this avoids using floats.
+            int32_t atp = sum + sum * y / 256;
+            adjusted_touch_pressure = (uint16_t)atp;
+        } else {
+            adjusted_touch_pressure = 0;
+        }
+
+        if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
+            scroller_position[scroller] = estimated_scroller_position;
         }
 
         // Update recorded previous positions and scroller active state
         for (j = 0; j < DEF_SCROLLER_NUM_PREV_POS - 1; j++) {
             scroller_previous_position[scroller][j] = scroller_previous_position[scroller][j + 1];
         }
+#ifdef SAVE_READINGS
+        last_reading[scroller] = sum;
+        if (sum > max_reading[scroller]) {
+            max_reading[scroller] = sum;
+        }
+        adj_reading[scroller] = adjusted_touch_pressure;
+#endif
         if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
             scroller_previous_position[scroller][DEF_SCROLLER_NUM_PREV_POS - 1] = scaled_value;
-            scroller_active[scroller] = true;
         } else {
             scroller_previous_position[scroller][DEF_SCROLLER_NUM_PREV_POS - 1] = DEF_SCROLLER_OFF;
+        }
+        // For every loop, we perform many qtouch iterations.
+        // Check if the sensor has been active within the whole loop.
+        //if (loop_max_pressure < adjusted_touch_pressure) {
+        //    loop_max_pressure = adjusted_touch_pressure;
+        //}
+        //if (loop_max_pressure >= DEF_SCROLLER_TOUCH_THRESHOLD) {
+        if (adjusted_touch_pressure >= DEF_SCROLLER_TOUCH_THRESHOLD) {
+            scroller_active[scroller] = true;
+        } else {
             scroller_active[scroller] = false;
         }
     }
 }
+
+//void reset_loop_pressure(void)
+//{
+//    loop_max_pressure = 0;
+//}
+
 
 /*============================================================================
 ISR(ADC0_RESRDY_vect)

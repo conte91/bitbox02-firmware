@@ -19,15 +19,32 @@
 #include <ui/components/waiting.h>
 #include <ui/screen_process.h>
 #include <ui/ugui/ugui.h>
+#include <inttypes.h>
 
 static uint8_t screen_frame_cnt = 0;
 
+#ifdef SAVE_READINGS
+const char* last_event  = "none";
+uint16_t last_reading[2] = {0};
+uint16_t max_reading[2] = {0};
+uint16_t adj_reading[2] = {0};
+uint16_t glob_x[2] = {0};
+uint16_t glob_y[2] = {0};
+#endif
 void ui_screen_render_component(component_t* component)
 {
     UG_ClearBuffer();
     component->position.left = 0;
     component->position.top = 0;
     component->f->render(component);
+#ifdef SAVE_READINGS
+    char evtstring[100];
+    //snprintf(evtstring, 100, "%s\nL: %"PRIu16" M: %"PRIu16" A:%"PRIu16" X: %"PRIu16" Y: %"PRIu16"\nL2: %"PRIu16" M2: %"PRIu16" A:%"PRIu16" X: %"PRIu16" Y: %"PRIu16, last_event, last_reading[0], max_reading[0], adj_reading[0], glob_x[0], glob_y[0], last_reading[1], max_reading[1], adj_reading[1], glob_x[1], glob_y[1]);
+    snprintf(evtstring, 100, "%s\nL: %"PRIu16" A:%"PRIu16" X: %"PRIu16" Y: %"PRIu16"\nL2: %"PRIu16" A:%"PRIu16" X: %"PRIu16" Y: %"PRIu16, last_event, last_reading[0], adj_reading[0], glob_x[0], glob_y[0], last_reading[1], adj_reading[1], glob_x[1], glob_y[1]);
+    if (last_event) {
+        UG_PutString(0, 0, evtstring, false);
+    }
+#endif
     UG_SendBuffer();
 }
 
