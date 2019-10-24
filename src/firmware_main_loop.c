@@ -17,8 +17,11 @@
 #include "ui/screen_process.h"
 #include "usb/usb_processing.h"
 
+#include <stdio.h>
+FILE *_dump_file;
 void firmware_main_loop(void)
 {
+    _dump_file = fopen("wtf.txt", "wb");
     while (1) {
         screen_process();
         usb_processing_process(usb_processing_hww());

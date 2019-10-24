@@ -515,6 +515,14 @@ uint8_t qtouch_get_sensor_state(uint16_t sensor_node)
 /* Holds preceding unfiltered scroller positions */
 static uint16_t sensor_previous_filtered_reading[DEF_NUM_SENSORS][DEF_SENSOR_NUM_PREV_POS] = {0};
 
+#ifdef SAVE_READINGS
+extern uint16_t last_reading[4];
+extern uint16_t max_reading[2];
+extern uint16_t adj_reading[2];
+extern uint16_t glob_x[2];
+extern uint16_t glob_y[2];
+#endif
+
 /* Custom sensor signal filter. */
 uint16_t qtouch_get_sensor_node_signal_filtered(uint16_t sensor_node)
 {
@@ -573,14 +581,6 @@ uint16_t qtouch_get_scroller_position(uint16_t scroller)
 {
     return scroller_position[scroller];
 }
-
-#ifdef SAVE_READINGS
-extern uint16_t last_reading[2];
-extern uint16_t max_reading[2];
-extern uint16_t adj_reading[2];
-extern uint16_t glob_x[2];
-extern uint16_t glob_y[2];
-#endif
 
 //uint16_t loop_max_pressure = 0;
 void qtouch_process_scroller_positions(void)
@@ -656,6 +656,7 @@ void qtouch_process_scroller_positions(void)
         } else {
             adjusted_touch_pressure = 0;
         }
+#endif
 
         if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
             scroller_position[scroller] = estimated_scroller_position;
@@ -667,10 +668,14 @@ void qtouch_process_scroller_positions(void)
         }
 #ifdef SAVE_READINGS
         last_reading[scroller] = sum;
-        if (sum > max_reading[scroller]) {
-            max_reading[scroller] = sum;
-        }
+        //if (sum > max_reading[scroller]) {
+            //max_reading[scroller] = sum;
+        //}
         adj_reading[scroller] = adjusted_touch_pressure;
+        //if (scroller == 0) {
+            //last_reading[0] = adjusted_touch_pressure;
+            //last_reading[1] = scroller_position[0];
+        //}
 #endif
         if (sum >= DEF_SCROLLER_DET_THRESHOLD) {
             scroller_previous_position[scroller][DEF_SCROLLER_NUM_PREV_POS - 1] = scaled_value;

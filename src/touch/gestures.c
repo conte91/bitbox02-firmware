@@ -190,14 +190,14 @@ static void _emit_continuous_slide_event(void)
 {
     if (_is_continuous_slide(top_slider)) {
         _gesture_emit_event(EVENT_TOP_SLIDE, top_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "top slide";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""top slide", count);
 #endif
     }
     if (_is_continuous_slide(bottom_slider)) {
         _gesture_emit_event(EVENT_BOTTOM_SLIDE, bottom_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "bottom slide";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""bottom slide", count);
 #endif
@@ -210,14 +210,14 @@ static void _emit_slide_release_event(void)
     tapCnt++;
     if (_is_slide_released(top_slider)) {
         _gesture_emit_event(EVENT_TOP_SLIDE_RELEASED, top_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "top slide release";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""top slide release", count);
 #endif
     }
     if (_is_slide_released(bottom_slider)) {
         _gesture_emit_event(EVENT_BOTTOM_SLIDE_RELEASED, bottom_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "bottom slide release";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""bottom slide release", count);
 #endif
@@ -228,14 +228,14 @@ static void _emit_long_tap_event(void)
 {
     if (_is_long_tap_release(top_slider)) {
         _gesture_emit_event(EVENT_TOP_LONG_TAP, top_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "long top";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""long top", count);
 #endif
     }
     if (_is_long_tap_release(bottom_slider)) {
         _gesture_emit_event(EVENT_BOTTOM_LONG_TAP, bottom_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "bottom top";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""long bottom", count);
 #endif
@@ -246,14 +246,14 @@ static void _emit_short_tap_event(void)
 {
     if (_is_tap_release(top_slider)) {
         _gesture_emit_event(EVENT_TOP_SHORT_TAP, top_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "short top";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""short top", count);
 #endif
     }
     if (_is_tap_release(bottom_slider)) {
         _gesture_emit_event(EVENT_BOTTOM_SHORT_TAP, bottom_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "short bottom";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""short bottom", count);
 #endif
@@ -264,14 +264,14 @@ static void _emit_continuous_tap_event(void)
 {
     if (_is_continuous_tap(top_slider)) {
         _gesture_emit_event(EVENT_TOP_CONTINUOUS_TAP, top_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "continuous top";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""continuous top", count);
 #endif
     }
     if (_is_continuous_tap(bottom_slider)) {
         _gesture_emit_event(EVENT_BOTTOM_CONTINUOUS_TAP, bottom_slider);
-#ifdef SAVE_READINGS
+#ifdef DISPLAY_READINGS
         last_event = "continuous bottom";
         //static int count=0; count++; screen_sprintf_debug(100, "%d""continuous bottom", count);
 #endif
