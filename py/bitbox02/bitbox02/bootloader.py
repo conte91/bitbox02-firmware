@@ -18,6 +18,8 @@ import typing
 import io
 import math
 import hashlib
+import serial
+import usart
 
 import hid
 import u2fhid
@@ -61,18 +63,19 @@ class Bootloader:
     """
 
     def __init__(self, device_info: DeviceInfo):
-        self.device = hid.device()
-        self.device.open_path(device_info["path"])
+        self.device = serial.Serial("/dev/ttyUSB0", 115200)
+        self.dump_file = open("session_dump.txt", "w")
         self.expected_magic = {
             "bb02-bootloader": SIGDATA_MAGIC_STANDARD,
             "bb02btc-bootloader": SIGDATA_MAGIC_BTCONLY,
+            "bb02-base": SIGDATA_MAGIC_STANDARD,
         }.get(device_info["product_string"])
         assert self.expected_magic
 
     def _query(self, msg: bytes) -> bytes:
         cid = u2fhid.generate_cid()
-        u2fhid.write(self.device, msg, BOOTLOADER_CMD, cid)
-        response = bytes(u2fhid.read(self.device, BOOTLOADER_CMD, cid))
+        usart.write(self.device, msg, BOOTLOADER_CMD, 1, self.dump_file)
+        response = bytes(usart.read(self.device, BOOTLOADER_CMD, 1, self.dump_file))
         if response[0] != msg[0]:
             raise Exception("bootloader api error, expected {}, got {}".format(msg[0], response[0]))
         if response[1] != 0:
@@ -191,3 +194,4 @@ class Bootloader:
 
     def close(self) -> None:
         self.device.close()
+        self.dump_file.close()

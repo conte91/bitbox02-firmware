@@ -89,8 +89,9 @@ def main() -> int:
             eprint("Found multiple bitboxes. Only one supported.")
             return 1
         except NoneFoundException:
-            eprint("Neither bootloader nor bitbox found.")
-            return 1
+            bootloader_device = {"path": "/dev/ttyUSB0", "product_string": "bb02-base"}
+            #eprint("Neither bootloader nor bitbox found.")
+            #return 1
 
     pprint.pprint(bootloader_device)
 
