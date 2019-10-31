@@ -22,6 +22,7 @@ from typing import List, Any, Optional, Callable, Union, Tuple, Sequence
 
 from tzlocal import get_localzone
 import bitbox02
+import bitboxbase
 from bitbox02 import HARDENED
 import u2f
 import u2f.bitbox02
@@ -482,45 +483,27 @@ def main() -> int:
             return u2fapp.run()
         return 1
 
-    try:
-        bitbox = bitbox02.get_any_bitbox02()
-    except bitbox02.TooManyFoundException:
-        print("Multiple bitboxes detected. Only one supported")
-        return 1
-    except bitbox02.NoneFoundException:
-        try:
-            bootloader = bitbox02.get_any_bitbox02_bootloader()
-        except bitbox02.TooManyFoundException:
-            print("Multiple bitbox bootloaders detected. Only one supported")
-        except bitbox02.NoneFoundException:
-            print("Neither bitbox nor bootloader found.")
+    def show_pairing(code: str) -> None:
+        print("Please compare and confirm the pairing code on your BitBox02:")
+        print(code)
+
+    def attestation_check(result: bool) -> None:
+        if result:
+            print("Device attestation PASSED")
         else:
-            boot_app = SendMessageBootloader(bitbox02.Bootloader(bootloader))
-            return boot_app.run()
-    else:
+            print("Device attestation FAILED")
 
-        def show_pairing(code: str) -> None:
-            print("Please compare and confirm the pairing code on your BitBox02:")
-            print(code)
-
-        def attestation_check(result: bool) -> None:
-            if result:
-                print("Device attestation PASSED")
-            else:
-                print("Device attestation FAILED")
-
-        device = bitbox02.BitBox02(
-            device_info=bitbox,
+    device = bitboxbase.BitBoxBase(
+            device_info={"path": "/dev/ttyUSB0", "product_string": "bb02-base", "serial_number": "v4.2.1"},
             show_pairing_callback=show_pairing,
             attestation_check_callback=attestation_check,
-        )
+    )
 
-        if args.debug:
-            print("Device Info:")
-            pprint.pprint(bitbox)
+    if args.debug:
+        print("Device Info:")
+        pprint.pprint(bitbox)
 
-        return SendMessage(device, args.debug).run()
-    return 1
+    return SendMessage(device, args.debug).run()
 
 
 if __name__ == "__main__":
