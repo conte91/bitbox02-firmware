@@ -14,6 +14,7 @@
 
 #include "bootloader.h"
 #include "bootloader_version.h"
+#include "leds.h"
 #include "mpu.h"
 
 #include <driver_init.h>
@@ -28,6 +29,7 @@
 #include <ui/components/ui_images.h>
 #include <ui/oled/oled.h>
 #include <ui/ugui/ugui.h>
+#include <usart/usart.h>
 #include <usb/usb.h>
 #include <usb/usb_packet.h>
 #include <usb/usb_processing.h>
@@ -802,10 +804,7 @@ static void _api_setup(void)
 {
     const CMD_Callback cmd_callbacks[] = {{BOOTLOADER_CMD, _api_msg}};
 
-    (void)cmd_callbacks;
-#if PLATFORM_BITBOX02 == 1
     usb_processing_register_cmds(usb_processing_hww(), cmd_callbacks, 1);
-#endif
 }
 
 #ifdef BOOTLOADER_PRODUCTION
@@ -877,6 +876,7 @@ static void _check_init(boot_data_t* data)
 }
 
 #ifdef BOOTLOADER_DEVDEVICE
+#if PLATFORM_BITBOX_02 == 1
 static bool _devdevice_enter(secbool_u32 firmware_verified)
 {
     UG_ClearBuffer();
@@ -910,6 +910,32 @@ static bool _devdevice_enter(secbool_u32 firmware_verified)
     }
 }
 #endif
+#if PLATFORM_BITBOX_BASE == 1
+
+#define BBBASE_FW_UPDATE_TIMEOUT (2000)
+
+static void _base_wait_fwupdate(void)
+{
+    leds_init();
+    turn_big_led(0, LED_RED);
+    turn_big_led(1, LED_RED);
+    usart_start();
+    _render_default_screen();
+    _api_setup();
+    screen_print_debug("Booting... Or FW update?", 1500);
+    for (int i = 0; i < BBBASE_FW_UPDATE_TIMEOUT; ++i) {
+        bool received = usart_receive();
+        usb_processing_process(usb_processing_hww());
+        if (received) {
+            i = 0;
+        } else {
+            delay_ms(1);
+        }
+    }
+    usart_stop();
+}
+#endif
+#endif
 
 void bootloader_jump(void)
 {
@@ -929,7 +955,7 @@ void bootloader_jump(void)
 #ifdef BOOTLOADER_DEVDEVICE
 #if PLATFORM_BITBOXBASE == 1
         // We don't have touch on base dev bootloader yet
-        (void)_devdevice_enter;
+        _base_wait_fwupdate();
         _binary_exec();
 #elif PLATFORM_BITBOX02 == 1
         if (!_devdevice_enter(_firmware_verified_jump(&bootdata, secfalse_u32))) {
@@ -950,9 +976,8 @@ void bootloader_jump(void)
         _render_message("Failed to initialize USB", 0);
     }
 #elif PLATFORM_BITBOXBASE == 1
-    // Until we support flashing via bootloader, simply boot
-    (void)_api_setup;
-    screen_print_debug("Booting", 1500);
+    // Wait for a bit for the user to flash a new firmware, then start.
+    _base_wait_fwupdate();
     _binary_exec();
 #endif
 }

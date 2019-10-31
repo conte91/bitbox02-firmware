@@ -15,11 +15,12 @@
 #include "usart_frame.h"
 
 #include "hardfault.h"
+#include "leds.h"
 #include "screen.h"
-#include "spettacolino.h"
 #include "usb/usb_processing.h"
 #include "util.h"
 
+#include "hal_delay.h"
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -142,19 +143,11 @@ static void _usart_manage_full_rx_frame(void)
     // Check if this packet is correct
     if (_usart_frame_parser_state.packet_size < 5) {
         // Packet too short.
-        while (1) {
-            spettacolino_red();
-        }
         return;
     }
     // At the moment we only support version 1.
     uint8_t version = _usart_frame_parser_state.buf[0];
     if (version != 1) {
-        spettacolino_red();
-        spettacolino_red();
-        while (1) {
-            spettacolino_red();
-        }
         return;
     }
     // Check the checksum, located in the last 2 bytes of the frame.
@@ -164,33 +157,18 @@ static void _usart_manage_full_rx_frame(void)
     uint16_t exp_checksum = _compute_checksum(_usart_frame_parser_state.buf, payload_length);
     printf("Checksum: 0x%" PRIx16 " exp: 0x%" PRIx16 "\n", checksum, exp_checksum);
     if (exp_checksum != checksum) {
-        while (1) {
-            spettacolino_red();
-        }
-        spettacolino_red();
-        spettacolino();
-        spettacolino_red();
         return;
     }
     uint8_t dst_endpoint = _usart_frame_parser_state.buf[1];
     uint8_t u2f_command = _usart_frame_parser_state.buf[2];
     if (dst_endpoint != 1) {
-        while (1) {
-            spettacolino_red();
-        }
-        spettacolino_red();
     }
-    // spettacolino();
     if (!usb_processing_enqueue(
             usb_processing_hww(),
             _usart_frame_parser_state.buf + 3,
             payload_length - 3,
             u2f_command,
             0x42)) {
-        while (1) {
-            spettacolino_red();
-            spettacolino();
-        }
     }
 }
 
@@ -205,9 +183,6 @@ static void _usart_frame_packet_end(void)
 static void _usart_frame_append_data_byte(uint8_t b)
 {
     if (_usart_frame_parser_state.packet_size == USART_FRAME_MAX_DATA_LEN) {
-        while (1) {
-            spettacolino_red();
-        }
         // Error. Start looking for a new packet and discard the current one.
         _usart_frame_reset_state();
         return;
@@ -242,9 +217,6 @@ static void _usart_frame_process_byte(uint8_t b)
         if (b == USART_FRAME_FLAG_BYTE) {
             // Escaped flag: this means "force reset, ignore this packet."
             _usart_frame_reset_state();
-            while (1) {
-                spettacolino_red();
-            }
         } else {
             // Everything else -> Data byte.
             _usart_frame_append_data_byte(b ^ USART_FRAME_ESCAPE_MASK);

@@ -19,7 +19,7 @@
 #include <stdlib.h>
 
 // Maximum size that can be transmitted in a single UART frame.
-#define USART_FRAME_MAX_DATA_LEN (4096U)
+#define USART_FRAME_MAX_DATA_LEN (5000U)
 
 /**
  * Processes new raw data read from the USART port.
