@@ -51,6 +51,7 @@ void workflow_start(void)
 #if PLATFORM_BITBOX_BASE == 1
     usart_start();
     hww_setup();
+    usart_endpoint_enable(USART_ENDPOINT_HWW);
 #else
     usb_start(hww_setup);
 #endif

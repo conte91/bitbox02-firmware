@@ -30,6 +30,7 @@
 #include <ui/oled/oled.h>
 #include <ui/ugui/ugui.h>
 #include <usart/usart.h>
+#include <usart/usart_frame.h>
 #include <usb/usb.h>
 #include <usb/usb_packet.h>
 #include <usb/usb_processing.h>
@@ -922,6 +923,8 @@ static void _base_wait_fwupdate(void)
     usart_start();
     _render_default_screen();
     _api_setup();
+    // Flag that packets for the bootloader endpoint can now be sent.
+    usart_endpoint_enable(USART_ENDPOINT_BOOTLOADER);
     screen_print_debug("Booting... Or FW update?", 1500);
     for (int i = 0; i < BBBASE_FW_UPDATE_TIMEOUT; ++i) {
         bool received = usart_receive();

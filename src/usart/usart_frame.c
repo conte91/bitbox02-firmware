@@ -59,7 +59,36 @@ static struct {
     usart_parse_state_t state;
     size_t packet_size;
     uint8_t buf[USART_FRAME_MAX_DATA_LEN];
+    // 1 byte for every possible registered endpoint.
+    uint8_t registered_endpoints[32];
 } _usart_frame_parser_state;
+
+void usart_endpoint_enable(usart_endpoint_t endpoint)
+{
+    /* Find out which byte/bit to put the flag for this endpoint. */
+    int endpoint_byte = endpoint >> 3;
+    /* Find out which byte/bit to put the flag for this endpoint. */
+    int endpoint_bit = endpoint & 0x07;
+    _usart_frame_parser_state.registered_endpoints[endpoint_byte] |= (1 << endpoint_bit);
+}
+
+void usart_endpoint_disable(usart_endpoint_t endpoint)
+{
+    /* Find out which byte/bit to put the flag for this endpoint. */
+    int endpoint_byte = endpoint >> 3;
+    int endpoint_bit = endpoint & 0x07;
+    /* Unset the corresponding flag. */
+    _usart_frame_parser_state.registered_endpoints[endpoint_byte] &= ~(1 << endpoint_bit);
+}
+
+bool is_usart_endpoint_enabled(usart_endpoint_t endpoint)
+{
+    /* Find out which byte/bit to put the flag for this endpoint. */
+    int endpoint_byte = endpoint >> 3;
+    int endpoint_bit = endpoint & 0x07;
+    return (
+        bool)(_usart_frame_parser_state.registered_endpoints[endpoint_byte] & (1 << endpoint_bit));
+}
 
 /**
  * Resets the current state.
@@ -186,14 +215,19 @@ static void _usart_manage_full_rx_frame(void)
     }
     uint8_t dst_endpoint = _usart_frame_parser_state.buf[1];
     uint8_t u2f_command = _usart_frame_parser_state.buf[2];
-    if (dst_endpoint != 1) {
+    if (!is_usart_endpoint_enabled(dst_endpoint)) {
+        _usart_send_frame_error(
+            USART_FRAME_ERROR_ENDPOINT_UNAVAILABLE, dst_endpoint, queue_hww_queue());
+        return;
     }
-    if (!usb_processing_enqueue(
-            usb_processing_hww(),
-            _usart_frame_parser_state.buf + 3,
-            payload_length - 3,
-            u2f_command,
-            0x42)) {
+    bool can_process = usb_processing_enqueue(
+        usb_processing_hww(),
+        _usart_frame_parser_state.buf + 3,
+        payload_length - 3,
+        u2f_command,
+        dst_endpoint);
+    if (!can_process) {
+        _usart_send_frame_error(USART_FRAME_ERROR_ENDPOINT_BUSY, dst_endpoint, queue_hww_queue());
     }
 }
 
@@ -297,21 +331,20 @@ queue_error_t usart_format_frame(
     const uint8_t cmd,
     const uint8_t* data,
     const uint32_t len,
-    const uint32_t cid,
+    const uint32_t endpoint,
     struct queue* queue)
 {
-    printf("Writing D%" PRIu32 " C%u CID%" PRIu32 " NP %u\n", len, cmd, cid, n_pushed);
-    (void)cid;
+    printf("Writing D%" PRIu32 " C%u CID%" PRIu32 " NP %u\n", len, cmd, endpoint, n_pushed);
     USART_FRAME_PUSH_BYTE(USART_FRAME_FLAG_BYTE);
     // Version == 0x01
     USART_FRAME_PUSH_ENCODED_BYTE(0x01);
     // Source endpoint == 0x01
-    USART_FRAME_PUSH_ENCODED_BYTE(0x01);
+    USART_FRAME_PUSH_ENCODED_BYTE(endpoint);
     USART_FRAME_PUSH_ENCODED_BYTE(cmd);
     for (uint32_t i = 0; i < len; ++i) {
         USART_FRAME_PUSH_ENCODED_BYTE(data[i]);
     }
-    uint16_t cs = _compute_send_checksum(0x01, cmd, 0x01, data, len);
+    uint16_t cs = _compute_send_checksum(0x01, cmd, endpoint, data, len);
     uint8_t* cs_buf = (uint8_t*)&cs;
     USART_FRAME_PUSH_ENCODED_BYTE(cs_buf[0]);
     USART_FRAME_PUSH_ENCODED_BYTE(cs_buf[1]);
