@@ -159,6 +159,8 @@ def read(usart_device: SupportsReadWrite, cmd: int, srcEndpoint: int, dump_file)
     expected_checksum = compute_checksum(data)
     if expected_checksum != reply_checksum:
         raise Exception(f"- USART checksum incorrect! {reply_checksum:x} != {expected_checksum:x}")
+    if src_endpoint == 0xFF:
+        raise Exception(f"- USART sent error: 0x{reply_cmd:x} from endpoint: 0x{data[0]:x}")
     if src_endpoint != srcEndpoint:
         raise Exception(f"- USART source endpoint mismatch {srcEndpoint:x} != {src_endpoint:x}")
     if reply_cmd != cmd:

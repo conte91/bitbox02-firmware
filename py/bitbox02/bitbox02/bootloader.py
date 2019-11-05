@@ -74,8 +74,8 @@ class Bootloader:
 
     def _query(self, msg: bytes) -> bytes:
         cid = u2fhid.generate_cid()
-        usart.write(self.device, msg, BOOTLOADER_CMD, 1, self.dump_file)
-        response = bytes(usart.read(self.device, BOOTLOADER_CMD, 1, self.dump_file))
+        usart.write(self.device, msg, BOOTLOADER_CMD, 0x42, self.dump_file)
+        response = bytes(usart.read(self.device, BOOTLOADER_CMD, 0x01, self.dump_file))
         if response[0] != msg[0]:
             raise Exception("bootloader api error, expected {}, got {}".format(msg[0], response[0]))
         if response[1] != 0:
