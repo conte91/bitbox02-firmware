@@ -29,6 +29,12 @@
 #define USART_FRAME_ESCAPE_BYTE ((uint8_t)0x7D)
 #define USART_FRAME_ESCAPE_MASK ((uint8_t)0x20)
 
+typedef enum {
+    USART_FRAME_ERROR_ENDPOINT_UNAVAILABLE = 0x01,
+    USART_FRAME_ERROR_ENDPOINT_BUSY = 0x02,
+    USART_FRAME_ERROR_INVALID_CMD = 0x03
+} usart_frame_error_t;
+
 /** State of the USART frame unpacker state machine. */
 typedef enum {
     /**
@@ -118,12 +124,12 @@ static uint16_t _compute_checksum(const uint8_t* data, size_t payload_length)
 static uint16_t _compute_send_checksum(
     const uint8_t version,
     const uint8_t cmd,
-    const uint8_t dst_endpoint,
+    const uint8_t src_endpoint,
     const uint8_t* data,
     const uint32_t len)
 {
     // The packet will contain version information in the first byte.
-    uint16_t header_0 = version | (dst_endpoint << 8);
+    uint16_t header_0 = version | (src_endpoint << 8);
     uint16_t header_1 = cmd;
     if (len == 0) {
         return _ones_complement_sum(header_0, header_1);
@@ -138,6 +144,17 @@ static uint16_t _compute_send_checksum(
     return cs;
 }
 
+static void _usart_send_frame_error(uint8_t error_code, uint32_t endpoint, struct queue* queue)
+{
+    uint8_t error_payload = endpoint;
+    usart_format_frame(error_code, &error_payload, 1, 0xFF, queue);
+}
+
+void usart_invalid_api_command(struct queue* queue, uint32_t src_endpoint)
+{
+    _usart_send_frame_error(USART_FRAME_ERROR_INVALID_CMD, src_endpoint, queue);
+}
+
 static void _usart_manage_full_rx_frame(void)
 {
     // Check if this packet is correct
@@ -148,6 +165,10 @@ static void _usart_manage_full_rx_frame(void)
     // At the moment we only support version 1.
     uint8_t version = _usart_frame_parser_state.buf[0];
     if (version != 1) {
+        /*
+         * FUTURE: implement frame errors. For now
+         * we just drop bad frames.
+         */
         return;
     }
     // Check the checksum, located in the last 2 bytes of the frame.
@@ -157,6 +178,10 @@ static void _usart_manage_full_rx_frame(void)
     uint16_t exp_checksum = _compute_checksum(_usart_frame_parser_state.buf, payload_length);
     printf("Checksum: 0x%" PRIx16 " exp: 0x%" PRIx16 "\n", checksum, exp_checksum);
     if (exp_checksum != checksum) {
+        /*
+         * FUTURE: implement frame errors. For now
+         * we just drop bad frames.
+         */
         return;
     }
     uint8_t dst_endpoint = _usart_frame_parser_state.buf[1];
@@ -238,19 +263,17 @@ void usart_frame_process_rx(uint8_t* buf, size_t size)
 }
 
 static size_t n_pushed = 0;
-#define USART_FRAME_PUSH_BYTE(x)                          \
-    do {                                                  \
-        uint8_t to_push = x;                              \
-        queue_error_t res = add_frame_callback(&to_push); \
-        if (res != QUEUE_ERR_NONE) {                      \
-            return res;                                   \
-        }                                                 \
-        n_pushed++;                                       \
+#define USART_FRAME_PUSH_BYTE(x)                         \
+    do {                                                 \
+        uint8_t to_push = x;                             \
+        queue_error_t res = queue_push(queue, &to_push); \
+        if (res != QUEUE_ERR_NONE) {                     \
+            return res;                                  \
+        }                                                \
+        n_pushed++;                                      \
     } while (0)
 
-static queue_error_t _usart_encode_push_byte(
-    uint8_t b,
-    queue_error_t(add_frame_callback)(const uint8_t*))
+static queue_error_t _usart_encode_push_byte(uint8_t b, struct queue* queue)
 {
     if (b == USART_FRAME_FLAG_BYTE || b == USART_FRAME_ESCAPE_BYTE) {
         // Escape special framing bytes.
@@ -262,12 +285,12 @@ static queue_error_t _usart_encode_push_byte(
     return QUEUE_ERR_NONE;
 }
 
-#define USART_FRAME_PUSH_ENCODED_BYTE(x)                                    \
-    do {                                                                    \
-        queue_error_t res = _usart_encode_push_byte(x, add_frame_callback); \
-        if (res != QUEUE_ERR_NONE) {                                        \
-            return res;                                                     \
-        }                                                                   \
+#define USART_FRAME_PUSH_ENCODED_BYTE(x)                       \
+    do {                                                       \
+        queue_error_t res = _usart_encode_push_byte(x, queue); \
+        if (res != QUEUE_ERR_NONE) {                           \
+            return res;                                        \
+        }                                                      \
     } while (0)
 
 queue_error_t usart_format_frame(
@@ -275,7 +298,7 @@ queue_error_t usart_format_frame(
     const uint8_t* data,
     const uint32_t len,
     const uint32_t cid,
-    queue_error_t(add_frame_callback)(const uint8_t*))
+    struct queue* queue)
 {
     printf("Writing D%" PRIu32 " C%u CID%" PRIu32 " NP %u\n", len, cmd, cid, n_pushed);
     (void)cid;

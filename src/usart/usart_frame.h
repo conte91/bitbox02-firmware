@@ -15,6 +15,9 @@
 #ifndef _USART_FRAME_H_
 #define _USART_FRAME_H_
 
+#include "queue.h"
+
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -32,5 +35,7 @@ void usart_frame_process_rx(uint8_t* buf, size_t size);
  * Initializes the parser.
  */
 void usart_frame_init(void);
+
+void usart_invalid_api_command(struct queue* queue, uint32_t src_endpoint);
 
 #endif

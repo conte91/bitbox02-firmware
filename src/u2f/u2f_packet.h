@@ -47,4 +47,10 @@ void u2f_packet_timeout_tick(void);
  * Enable timer for this cid
  */
 void u2f_packet_timeout_enable(uint32_t cid);
+
+/**
+ * Sends an error message back on this stack.
+ */
+void u2f_invalid_api_command(struct queue* queue, uint32_t cid);
+
 #endif

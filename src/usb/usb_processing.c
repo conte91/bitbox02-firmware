@@ -15,6 +15,7 @@
 #include "usb_processing.h"
 #include "platform_config.h"
 #include "u2f/u2f_packet.h"
+#include "usart/usart_frame.h"
 #include "usb_frame.h"
 #include "usb_packet.h"
 
@@ -32,6 +33,7 @@ struct usb_processing {
     struct queue* (*out_queue)(void);
     void (*send)(void);
     usb_frame_formatter_t format_frame;
+    void (*manage_invalid_cmd)(struct queue* queue, uint32_t cid);
 };
 
 /*
@@ -60,14 +62,6 @@ static Packet _in_packet;
 // TODO: remove this global in future refactoring
 static struct queue* _global_queue;
 
-static queue_error_t _queue_push(const uint8_t* data)
-{
-    if (_global_queue == NULL) {
-        Abort("usb_processing: Internal error");
-    }
-    return queue_push(_global_queue, data);
-}
-
 /**
  * Responds with data of a certain length.
  * @param[in] packet The packet to be sent.
@@ -76,7 +70,7 @@ static queue_error_t _enqueue_frames(struct usb_processing* ctx, const Packet* o
 {
     _global_queue = ctx->out_queue();
     return ctx->format_frame(
-        out_packet->cmd, out_packet->data_addr, out_packet->len, out_packet->cid, _queue_push);
+        out_packet->cmd, out_packet->data_addr, out_packet->len, out_packet->cid, ctx->out_queue());
 }
 
 /**
@@ -193,13 +187,7 @@ static void _usb_process_incoming_packet(struct usb_processing* ctx)
     }
 
     if (!cmd_valid) {
-        // TODO: if U2F is disabled, we used to return a 'channel busy' command.
-        // now we return an invalid cmd, because there is not going to be a matching
-        // cmd in '_registered_cmds' if the U2F bit it not set (== U2F disabled).
-        // TODO: figure out the consequences and either implement a solution or
-        // inform U2F hijack vendors.
-        _global_queue = ctx->out_queue();
-        // usb_frame_prepare_err(FRAME_ERR_INVALID_CMD, _in_packet.cid, _queue_push);
+        ctx->manage_invalid_cmd(ctx->out_queue(), _in_packet.cid);
     }
     _usb_processing_drop_received(ctx);
 }
@@ -246,14 +234,17 @@ void usb_processing_init(void)
     queue_init(queue_u2f_queue(), USB_REPORT_SIZE);
     usb_processing_u2f()->format_frame = usb_frame_reply;
     usb_processing_u2f()->has_packet = false;
+    usb_processing_u2f()->manage_invalid_cmd = u2f_invalid_api_command;
 #endif
     usb_processing_hww()->out_queue = queue_hww_queue;
 #if PLATFORM_BITBOX_BASE == 1
     queue_init(queue_hww_queue(), 1);
     usb_processing_hww()->format_frame = usart_format_frame;
+    usb_processing_hww()->manage_invalid_cmd = usart_invalid_api_command;
 #else
     queue_init(queue_hww_queue(), USB_REPORT_SIZE);
     usb_processing_hww()->format_frame = usb_frame_reply;
+    usb_processing_hww()->manage_invalid_cmd = usb_invalid_api_command;
 #endif
     usb_processing_hww()->has_packet = false;
 }
