@@ -19,10 +19,9 @@ import io
 import math
 import hashlib
 import serial
-import usart
 
 import hid
-import u2fhid
+import communication
 from .devices import DeviceInfo
 
 BOOTLOADER_CMD = 0x80 + 0x40 + 0x03
@@ -62,8 +61,8 @@ class Bootloader:
     One instance of a BitBox02 Bootloader, exposing the bootloader API.
     """
 
-    def __init__(self, device_info: DeviceInfo):
-        self.device = serial.Serial("/dev/ttyUSB0", 115200)
+    def __init__(self, transport: communication.TransportLayer, device_info: DeviceInfo):
+        self.device = transport
         self.dump_file = open("session_dump.txt", "w")
         self.expected_magic = {
             "bb02-bootloader": SIGDATA_MAGIC_STANDARD,
@@ -73,9 +72,8 @@ class Bootloader:
         assert self.expected_magic
 
     def _query(self, msg: bytes) -> bytes:
-        cid = u2fhid.generate_cid()
-        usart.write(self.device, msg, BOOTLOADER_CMD, 1, self.dump_file)
-        response = bytes(usart.read(self.device, BOOTLOADER_CMD, 1, self.dump_file))
+        cid = self.device.generate_cid()
+        response = self.device.query(msg, BOOTLOADER_CMD, cid)
         if response[0] != msg[0]:
             raise Exception("bootloader api error, expected {}, got {}".format(msg[0], response[0]))
         if response[1] != 0:
@@ -186,7 +184,7 @@ class Bootloader:
         return empty_firmware_hash == reported_firmware_hash
 
     def reboot(self) -> None:
-        u2fhid.write(self.device, b"r", BOOTLOADER_CMD, u2fhid.generate_cid())
+        self.device.write(b"r", BOOTLOADER_CMD, self.device.generate_cid())
         self.device.close()
 
     def screen_rotate(self) -> None:

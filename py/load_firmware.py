@@ -14,7 +14,7 @@
 # limitations under the License.
 """TODO: document"""
 
-
+import hid
 import sys
 import pprint
 from typing import Any
@@ -23,6 +23,7 @@ from time import sleep
 from bitbox02 import devices
 from bitbox02 import Bootloader, BitBox02
 from bitbox02 import TooManyFoundException, NoneFoundException
+import communication
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
@@ -89,13 +90,15 @@ def main() -> int:
             eprint("Found multiple bitboxes. Only one supported.")
             return 1
         except NoneFoundException:
-            bootloader_device = {"path": "/dev/ttyUSB0", "product_string": "bb02-base"}
-            #eprint("Neither bootloader nor bitbox found.")
-            #return 1
+            eprint("Neither bootloader nor bitbox found.")
+            return 1
 
     pprint.pprint(bootloader_device)
 
-    bootloader = Bootloader(bootloader_device)
+    hid_dev = hid.device()
+    hid_dev.open_path(bootloader_device["path"])
+
+    bootloader = Bootloader(communication.u2fhid.U2FHid(hid_dev), bootloader_device)
 
     with open(filename, "rb") as file:
         firmware = file.read()
