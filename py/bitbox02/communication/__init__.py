@@ -15,3 +15,4 @@
 """Abstraction for the transport layer used for transmitting U2F messages."""
 
 from .communication import *
+from .bitbox_api_protocol import *

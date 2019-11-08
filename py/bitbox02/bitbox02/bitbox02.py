@@ -27,9 +27,9 @@ from typing_extensions import TypedDict
 
 import ecdsa
 from noise.connection import NoiseConnection, Keypair
-import hid
 import semver
 
+import communication
 from communication import TransportLayer
 from .devices import parse_device_version, DeviceInfo
 
@@ -174,7 +174,7 @@ class AttestationException(Exception):
     pass
 
 
-class BitBox02:
+class BitBox02(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI):
     """Class to communicate with a BitBox02"""
 
     # pylint: disable=too-many-public-methods
@@ -186,118 +186,10 @@ class BitBox02:
         show_pairing_callback: Callable[[str], None],
         attestation_check_callback: Optional[Callable[[bool], None]] = None,
     ):
-        self.debug = False
-        serial_number = device_info["serial_number"]
-
-        self.version = parse_device_version(serial_number)
-        if self.version is None:
-            raise ValueError(f"Could not parse version from {serial_number}")
-        # Delete the prelease part, as it messes with the comparison (e.g. 3.0.0-pre < 3.0.0 is
-        # True, but the 3.0.0-pre has already the same API breaking changes like 3.0.0...).
-        self.version = semver.VersionInfo(
-            self.version.major, self.version.minor, self.version.patch, build=self.version.build
+        communication.BitBoxAPIExchanger.__init__(
+            self, device, device_info, show_pairing_callback, attestation_check_callback
         )
-
-        self._device = device
-        if self.version >= semver.VersionInfo(2, 0, 0):
-            if attestation_check_callback is not None:
-                # Perform attestation
-                attestation_check_callback(self._perform_attestation())
-
-            # Invoke unlock workflow on the device.
-            # In version <2.0.0, the device did this automatically.
-            unlock_result = self._query(OP_UNLOCK)
-            if self.version < semver.VersionInfo(3, 0, 0):
-                assert unlock_result == b""
-            else:
-                # since 3.0.0, unlock can fail if cancelled
-                if unlock_result == RESPONSE_FAILURE:
-                    raise Exception("Unlock process aborted")
-
-        if self._query(OP_I_CAN_HAS_HANDSHAEK) != RESPONSE_SUCCESS:
-            raise Exception("Couldn't kick off handshake")
-
-        # init noise channel
-        noise = NoiseConnection.from_name(b"Noise_XX_25519_ChaChaPoly_SHA256")
-        noise.set_as_initiator()
-        dummy_private_key = os.urandom(32)
-        noise.set_keypair_from_private_bytes(Keypair.STATIC, dummy_private_key)
-        noise.set_prologue(b"Noise_XX_25519_ChaChaPoly_SHA256")
-        noise.start_handshake()
-        noise.read_message(self._query(noise.write_message()))
-        assert not noise.handshake_finished
-        send_msg = noise.write_message()
-        assert noise.handshake_finished
-        pairing_code = base64.b32encode(noise.get_handshake_hash()).decode("ascii")
-        show_pairing_callback(
-            "{} {}\n{} {}".format(
-                pairing_code[:5], pairing_code[5:10], pairing_code[10:15], pairing_code[15:20]
-            )
-        )
-        response = self._query(send_msg)
-
-        # Can be set to False if the remote static pubkey was previously confirmed.
-        pairing_verification_required_by_host = True
-
-        pairing_verification_required_by_device = response == b"\x01"
-        if pairing_verification_required_by_host or pairing_verification_required_by_device:
-            pairing_response = self._query(OP_I_CAN_HAS_PAIRIN_VERIFICASHUN)
-            if pairing_response == RESPONSE_SUCCESS:
-                pass
-            elif pairing_response == RESPONSE_FAILURE:
-                raise Exception("pairing rejected by the user")
-            else:
-                raise Exception("unexpected response")
-        self.noise = noise
-
-    def close(self) -> None:
-        self._device.close()
-
-    def _query(self, msg: bytes) -> bytes:
-        """
-        Sends msg bytes and retrieves response bytes.
-        """
-        cid = self._device.generate_cid()
-        return self._device.query(msg, HWW_CMD, cid)
-
-    def _encrypted_query(self, msg: bytes) -> bytes:
-        """
-        Sends msg bytes and reads response bytes over an encrypted channel.
-        """
-        encrypted_msg = self.noise.encrypt(msg)
-        if self.version >= semver.VersionInfo(4, 0, 0):
-            encrypted_msg = OP_NOISE_MSG + encrypted_msg
-
-        result = self.noise.decrypt(self._query(encrypted_msg))
-        assert isinstance(result, bytes)
-        return result
-
-    def _msg_query(
-        self, request: hww.Request, expected_response: Optional[str] = None
-    ) -> hww.Response:
-        """
-        Sends protobuf msg and retrieves protobuf response over an encrypted
-        channel.
-        """
-        # pylint: disable=no-member
-        if self.debug:
-            print(request)
-        response_bytes = self._encrypted_query(request.SerializeToString())
-        response = hww.Response()
-        response.ParseFromString(response_bytes)
-        if response.WhichOneof("response") == "error":
-            if response.error.code == ERR_USER_ABORT:
-                raise UserAbortException(response.error.code, response.error.message)
-            raise Bitbox02Exception(response.error.code, response.error.message)
-        if expected_response is not None and response.WhichOneof("response") != expected_response:
-            raise Exception(
-                "Unexpected response: {}, expected: {}".format(
-                    response.WhichOneof("response"), expected_response
-                )
-            )
-        if self.debug:
-            print(response)
-        return response
+        communication.BitBoxCommonAPI.__init__(self)
 
     def get_info(self) -> Tuple[str, Platform, Union[BitBox02Edition, BitBoxBaseEdition], bool]:
         """
@@ -616,63 +508,6 @@ class BitBox02:
         request = hww.Request()
         request.set_mnemonic_passphrase_enabled.enabled = False
         self._msg_query(request, expected_response="success")
-
-    def _perform_attestation(self) -> bool:
-        """Sends a random challenge and verifies that the response can be verified with
-        Shift's root attestation pubkeys. Returns True if the verification is successful."""
-
-        challenge = os.urandom(32)
-        response = self._query(OP_ATTESTATION + challenge)
-        if response[:1] != RESPONSE_SUCCESS:
-            return False
-
-        # parse data
-        response = response[1:]
-        bootloader_hash, response = response[:32], response[32:]
-        device_pubkey_bytes, response = response[:64], response[64:]
-        certificate, response = response[:64], response[64:]
-        root_pubkey_identifier, response = response[:32], response[32:]
-        challenge_signature, response = response[:64], response[64:]
-
-        # check attestation
-        if root_pubkey_identifier not in ATTESTATION_PUBKEYS_MAP:
-            # root pubkey could not be identified.
-            return False
-
-        root_pubkey_bytes_uncompressed = ATTESTATION_PUBKEYS_MAP[root_pubkey_identifier]
-        root_pubkey = ecdsa.VerifyingKey.from_string(
-            root_pubkey_bytes_uncompressed[1:], ecdsa.curves.SECP256k1
-        )
-
-        device_pubkey = ecdsa.VerifyingKey.from_string(device_pubkey_bytes, ecdsa.curves.NIST256p)
-
-        try:
-            # Verify certificate
-            if not root_pubkey.verify(
-                certificate, bootloader_hash + device_pubkey_bytes, hashfunc=hashlib.sha256
-            ):
-                return False
-
-            # Verify challenge
-            if not device_pubkey.verify(challenge_signature, challenge, hashfunc=hashlib.sha256):
-                return False
-        except ecdsa.BadSignatureError:
-            return False
-        return True
-
-    def reboot(self) -> bool:
-        """TODO: Document"""
-        # pylint: disable=no-member
-        request = hww.Request()
-        request.reboot.CopyFrom(system.RebootRequest())
-        try:
-            self._msg_query(request)
-        except OSError:
-            # In case of reboot we can't read the response.
-            return True
-        except Bitbox02Exception:
-            return False
-        return True
 
     def _eth_msg_query(
         self, eth_request: eth.ETHRequest, expected_response: Optional[str] = None

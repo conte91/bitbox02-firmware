@@ -25,6 +25,7 @@ from time import sleep
 from bitbox02 import devices
 from bitbox02 import Bootloader, BitBox02
 from bitbox02 import TooManyFoundException, NoneFoundException
+import communication
 from communication import u2fhid
 from communication.usart import U2FUsartError, U2FUsartTimeoutError, U2FUsartErrorResponse
 
