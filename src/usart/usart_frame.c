@@ -139,8 +139,8 @@ static uint16_t _compute_send_checksum(
 
 static void _usart_send_frame_error(uint8_t error_code, uint32_t endpoint, struct queue* queue)
 {
-    uint8_t error_payload = endpoint;
-    usart_format_frame(error_code, &error_payload, 1, 0xFF, queue);
+    uint16_t error_payload = (error_code << 8) | (uint8_t)endpoint;
+    usart_format_frame(0xFF, (uint8_t*)&error_payload, 2, /* CID is unused. */ 0x42, queue);
 }
 
 /**

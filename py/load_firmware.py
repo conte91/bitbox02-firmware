@@ -14,7 +14,9 @@
 # limitations under the License.
 """TODO: document"""
 
+import argparse
 import hid
+import serial
 import sys
 import pprint
 from typing import Any
@@ -24,6 +26,7 @@ from bitbox02 import devices
 from bitbox02 import Bootloader, BitBox02
 from bitbox02 import TooManyFoundException, NoneFoundException
 import communication
+from communication.usart import U2FUsartError, U2FUsartTimeoutError, U2FUsartErrorResponse
 
 
 def eprint(*args: Any, **kwargs: Any) -> None:
@@ -37,13 +40,15 @@ def eprint(*args: Any, **kwargs: Any) -> None:
 def get_bitbox_and_reboot() -> devices.DeviceInfo:
     """Search for a bitbox and then reboot it into bootloader"""
     device = devices.get_any_bitbox02()
+    hid_dev = hid.device()
+    hid_dev.open_path(device["path"])
 
     # bitbox02 detected -> send command to reboot into bootloader to upgrade.
     def _show_pairing(code: str) -> None:
         print("Please compare and confirm the pairing code on your BitBox02:")
         print(code)
 
-    bitbox = BitBox02(device_info=device, show_pairing_callback=_show_pairing)
+    bitbox = BitBox02(device=communication.u2fhid.U2FHid(hid_dev), device_info=device, show_pairing_callback=_show_pairing)
     bitbox.reboot()
 
     # wait for it to reboot
@@ -57,29 +62,13 @@ def get_bitbox_and_reboot() -> devices.DeviceInfo:
             continue
         return bootloader_device
 
-
-def main() -> int:
-    """Main function"""
-    debug = len(sys.argv) == 3 and sys.argv[2] == "debug"
-    if not (len(sys.argv) == 2 or debug):
-        eprint("\n\nUsage:\n\tpython load_firmware.py firmware_name.bin [debug]")
-        eprint(
-            "\tif debug is specified, the firmware should be unsigned, otherwise it "
-            "should be signed."
-        )
-        return 1
-
-    filename = sys.argv[1]
-    if not debug and ".signed.bin" not in filename:
-        eprint("Expecting firmware to end with '.signed.bin'")
-        return 1
-
+def find_and_open_usb_bitbox() -> (dict, communication.TransportLayer):
     bootloader_device = None
     try:
         bootloader_device = devices.get_any_bitbox02_bootloader()
     except TooManyFoundException:
         eprint("Found multiple bb02 bootloader standard editions. Only one supported.")
-        return 1
+        sys.exit(1)
     except NoneFoundException:
         pass
 
@@ -88,17 +77,93 @@ def main() -> int:
             bootloader_device = get_bitbox_and_reboot()
         except TooManyFoundException:
             eprint("Found multiple bitboxes. Only one supported.")
-            return 1
+            sys.exit(1)
         except NoneFoundException:
             eprint("Neither bootloader nor bitbox found.")
-            return 1
+            sys.exit(1)
 
     pprint.pprint(bootloader_device)
 
     hid_dev = hid.device()
     hid_dev.open_path(bootloader_device["path"])
+    return bootloader_device, communication.u2fhid.U2FHid(hid_dev)
 
-    bootloader = Bootloader(communication.u2fhid.U2FHid(hid_dev), bootloader_device)
+def try_usart_bootloader_connection(serial_port, bootloader_device) -> str:
+    transport = communication.usart.U2FUsart(serial_port)
+    try:
+        bootloader_attempt = Bootloader(transport, bootloader_device)
+        bootloader_attempt.versions()
+        success = "Connected"
+    except U2FUsartErrorResponse as e:
+        if e.error_code != U2FUsartErrorResponse.ErrorCode.USART_FRAME_ERROR_ENDPOINT_UNAVAILABLE:
+            raise
+        else:
+            success = "NotAvailable"
+    except U2FUsartTimeoutError:
+        success = "Timeout"
+    finally:
+        bootloader_attempt.close()
+    return success
+
+def find_and_open_usart_bitbox(serial_port) -> (dict, communication.TransportLayer):
+    print("Connecting to BitBox bootloader over UART.")
+    bootloader_device = {"serial_number": "v4.2.0", "product_string": "bb02-base"}
+    # First, try to connect to the bootloader directly.
+    bootloader_status = try_usart_bootloader_connection(serial_port, bootloader_device)
+    if bootloader_status == "Connected":
+        return bootloader_device
+    elif bootloader_status == "Timeout":
+        print("No reponse from BitBox. Maybe it's not connected properly?")
+        sys.exit(1)
+
+    # The bootloader wasn't valid, try to connect to the firmware instead.
+    print("BitBox bootloader not available.")
+    print("Trying to connect to BitBox firmware instead...")
+
+    def _show_pairing(code: str) -> None:
+        print("Accept the pairing request on your device...")
+    try:
+        transport = communication.usart.U2FUsart(serial_port)
+        bitbox_attempt = BitBox02(transport, bootloader_device, show_pairing_callback=_show_pairing)
+        print("Connected. Rebooting.")
+        bitbox_attempt.reboot()
+    except U2FUsartTimeoutError:
+        pass
+    finally:
+        bitbox_attempt.close()
+    print("Reboot completed.")
+
+    # wait for it to reboot
+    while True:
+        bootloader_status = try_usart_bootloader_connection(serial_port, bootloader_device)
+        if bootloader_status == "Connected":
+            return bootloader_device
+        elif bootloader_status == "Timeout":
+            print("Waiting for the BitBox bootloader to show up...")
+            sleep(1)
+        else:
+            print("Stuck in bitbox mode -  didn't reboot properly!")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Tool for flashing a new firmware on BitBox devices.")
+    parser.add_argument("--debug", action="store_true", help="Flash a debug (unsigned) firmware.")
+    parser.add_argument("--usart", action="store", help="Flash firmware using U2F-over-UART (BitBoxBase), with the specified serial port.")
+    parser.add_argument("firmware", nargs=1, help="Firmware to flash.")
+    args = parser.parse_args()
+
+    filename = sys.argv[1]
+    if not args.debug and ".signed.bin" not in filename:
+        eprint("Expecting firmware to end with '.signed.bin'")
+        return 1
+
+    if (args.usart is not None):
+            serial_port = serial.Serial(args.usart, 115200, timeout=3)
+            bootloader_device = find_and_open_usart_bitbox(serial_port)
+            transport = communication.usart.U2FUsart(serial_port)
+            bootloader = Bootloader(transport, bootloader_device)
+    else:
+        bootloader_device, transport = find_and_open_usb_bitbox()
+    bootloader = Bootloader(transport, bootloader_device)
 
     with open(filename, "rb") as file:
         firmware = file.read()
@@ -114,7 +179,7 @@ def main() -> int:
         print("firmware hash:", firmware_hash.hex())
         print("signing keydata hash:", signing_keydata_hash.hex())
 
-    if debug:
+    if args.debug:
         bootloader.flash_unsigned_firmware(firmware, progress)
     else:
         bootloader.flash_signed_firmware(firmware, progress)
