@@ -153,6 +153,7 @@ set(PLATFORM-BITBOXBASE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/usart/usart.c
   ${CMAKE_SOURCE_DIR}/src/usart/usart_frame.c
   ${CMAKE_SOURCE_DIR}/src/usart/usart_hww.c
+  ${CMAKE_SOURCE_DIR}/src/bitboxbase/bitboxbase_background.c
 )
 set(PLATFORM-BITBOXBASE-SOURCES ${PLATFORM-BITBOXBASE-SOURCES} PARENT_SCOPE)
 

@@ -27,6 +27,7 @@
 #include "util.h"
 #include "workflow/workflow.h"
 #include "rust/bitbox02_rust.h"
+#include "bitboxbase_background.h"
 
 #include <stdlib.h>
 
@@ -46,12 +47,8 @@ int main(void)
     hww_setup();
     common_main();
     traceln("%s", "Device initialized");
-    const uint8_t ip[] = {192, 168, 0, 1};
-    const char hostname[] = "hejhopp";
-    bitboxbase_config_set(0, 0, 0, ip, hostname, strlen(hostname));
+    bitboxbase_background();
     for (;;) {
-        bitboxbase_display_status(0);
-        delay_ms(3000);
         screen_process();
         usart_receive();
         usb_processing_process(usb_processing_hww());
