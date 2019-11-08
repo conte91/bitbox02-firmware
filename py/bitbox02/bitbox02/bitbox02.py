@@ -258,8 +258,7 @@ class BitBox02:
         Sends msg bytes and retrieves response bytes.
         """
         cid = self._device.generate_cid()
-        self._device.write(msg, HWW_CMD, cid)
-        return bytes(self._device.read(HWW_CMD, cid))
+        return self._device.query(msg, HWW_CMD, cid)
 
     def _encrypted_query(self, msg: bytes) -> bytes:
         """
