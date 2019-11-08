@@ -31,6 +31,7 @@ import hid
 import semver
 
 import u2fhid
+import communication
 from .devices import parse_device_version, DeviceInfo
 
 try:
@@ -181,12 +182,14 @@ class BitBox02:
 
     def __init__(
         self,
+        device: communication.TransportLayer,
         device_info: DeviceInfo,
         show_pairing_callback: Callable[[str], None],
         attestation_check_callback: Optional[Callable[[bool], None]] = None,
     ):
         self.debug = False
         serial_number = device_info["serial_number"]
+        self.device = device
 
         self.version = parse_device_version(serial_number)
         if self.version is None:
@@ -197,8 +200,6 @@ class BitBox02:
             self.version.major, self.version.minor, self.version.patch, build=self.version.build
         )
 
-        self.device = hid.device()
-        self.device.open_path(device_info["path"])
         if self.version >= semver.VersionInfo(2, 0, 0):
             if attestation_check_callback is not None:
                 # Perform attestation
@@ -257,9 +258,8 @@ class BitBox02:
         """
         Sends msg bytes and retrieves response bytes.
         """
-        cid = u2fhid.generate_cid()
-        u2fhid.write(self.device, msg, HWW_CMD, cid)
-        return bytes(u2fhid.read(self.device, HWW_CMD, cid))
+        cid = self.device.generate_cid()
+        return self.device.query(msg, HWW_CMD, cid)
 
     def _encrypted_query(self, msg: bytes) -> bytes:
         """
