@@ -33,6 +33,7 @@ mod general;
 mod util;
 
 use util::Ipv4Addr;
+use platform::bitboxbase::status::{AlarmState, AlarmSeverity, Status};
 
 #[cfg(not(test))]
 #[panic_handler]
@@ -124,14 +125,14 @@ pub extern "C" fn bitboxbase_display_status(duration: u64) {
     platform::bitboxbase::display::display_status(config, duration);
 }
 
+static mut STATUS: Status = Status::new();
+
 #[no_mangle]
-pub extern "C" fn bitboxbase_heartbeat(error_code: *const c_char, error_code_len: usize, _system_update_code: u32) -> bool {
-    // It is not safe to call any functions that also touch CONFIG at the same time
-    let config = unsafe { &mut CONFIG };
-    assert!(!error_code.is_null());
-    let error_code = unsafe { core::slice::from_raw_parts(error_code, error_code_len) };
-    let error_code = core::str::from_utf8(error_code).expect("Invalid utf-8");
-    config.set_error_code(error_code);
+pub extern "C" fn bitboxbase_heartbeat(status_code: u32) -> bool {
+    // It is not safe to call any functions that also touch STATUS at the same time
+    let status = unsafe {&mut STATUS};
+    status.update(status_code);
+
     true
 }
 
@@ -159,4 +160,31 @@ pub extern "C" fn bitboxbase_config_ip_get(res: *mut c_char, res_len: usize) {
         let _ = write!(astr, "unknown");
     }
     buf[0..astr.len()].copy_from_slice(&astr.as_bytes()[0..astr.len()]);
+}
+
+#[no_mangle]
+pub extern "C" fn bitboxbase_status_get_alarm_state() -> u32 {
+    let status = unsafe {&STATUS};
+    if let Some(state) = status.get_alarm_state() {
+        match state {
+            AlarmState::Communication => 1,
+            AlarmState::Offline => 2,
+        }
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn bitboxbase_status_get_alarm_severity() -> u32 {
+    let status = unsafe {&STATUS};
+    if let Some(severity) = status.get_alarm_severity() {
+        match severity {
+            AlarmSeverity::Notice => 1,
+            AlarmSeverity::Warning => 2,
+            AlarmSeverity::Error => 3,
+        }
+    } else {
+        0
+    }
 }

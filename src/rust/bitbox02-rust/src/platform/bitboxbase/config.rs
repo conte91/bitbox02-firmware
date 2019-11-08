@@ -38,7 +38,6 @@ pub struct Config {
     pub(crate) default_display_duration: Duration,
     pub(crate) hostname: Option<ArrayString<[u8; 64]>>,
     pub(crate) ip: Option<Ipv4Addr>,
-    pub(crate) error_code: Option<ArrayString<[u8; 64]>>,
 }
 
 impl Config {
@@ -49,7 +48,6 @@ impl Config {
             default_display_duration: Duration::from_secs(10),
             hostname: None,
             ip: None,
-            error_code: None,
         }
     }
 
@@ -77,8 +75,5 @@ impl Config {
     }
     pub fn set_ip(&mut self, ip: Ipv4Addr) {
         self.ip = Some(ip);
-    }
-    pub fn set_error_code(&mut self, error_code: &str) {
-        self.error_code = Some(ArrayString::from(error_code).expect("Buffer to short"));
     }
 }

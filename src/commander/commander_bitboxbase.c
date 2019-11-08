@@ -23,7 +23,7 @@
 
 static commander_error_t _api_heartbeat(const BitBoxBaseHeartBeatRequest* request)
 {
-    if (!bitboxbase_heartbeat(request->error_code, strlen(request->error_code), request->system_update_code)) {
+    if (!bitboxbase_heartbeat(request->status_code)) {
         return COMMANDER_ERR_GENERIC;
     }
     return COMMANDER_OK;

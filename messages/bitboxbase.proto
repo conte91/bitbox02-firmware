@@ -16,8 +16,7 @@ syntax = "proto3";
 
 // Should be sent every X seconds (TBD) unless the firmware already is busy with a command.
 message BitBoxBaseHeartBeatRequest {
-  string error_code = 1;
-  uint32 system_update_code = 2;
+  uint32 status_code = 1;
 }
 
 // This will display the first 20 characters of the base32 encoded version of

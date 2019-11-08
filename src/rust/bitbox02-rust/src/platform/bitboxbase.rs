@@ -15,3 +15,4 @@
 pub mod config;
 pub mod display;
 pub mod workflow;
+pub mod status;

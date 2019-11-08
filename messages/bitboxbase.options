@@ -15,4 +15,3 @@
 BitBoxBaseConfirmPairingRequest.msg fixed_length:true max_size:32
 BitBoxBaseSetConfigRequest.hostname fixed_length:true max_size:64
 BitBoxBaseSetConfigRequest.ip fixed_length:true max_size:4
-BitBoxBaseHeartBeatRequest.error_code fixed_length:true max_size:64

@@ -22,6 +22,7 @@
 #include <ui/screen_stack.h>
 #include <string.h>
 #include <rust/bitbox02_rust.h>
+#include <leds.h>
 
 static void _render(component_t* component);
 
@@ -37,6 +38,24 @@ void _render(component_t* component) {
         char buf[100] = "IP: ";
         bitboxbase_config_ip_get(&buf[4], sizeof(buf)-4);
         label_update(label, buf);
+    }
+    leds_turn_big_led(1, LED_COLOR_NONE);
+    switch(bitboxbase_status_get_alarm_severity()) {
+    case 0:
+        leds_turn_big_led(0, LED_COLOR_GREEN);
+        break;
+    case 1:
+        leds_turn_big_led(0, LED_COLOR_BLUE);
+        break;
+    case 2:
+        leds_turn_big_led(0, LED_COLOR_RED);
+        break;
+    case 3:
+        leds_turn_big_led(0, LED_COLOR_RED);
+        break;
+    default:
+        leds_turn_big_led(0, LED_COLOR_RED);
+        break;
     }
     ui_util_component_render_subcomponents(component);
 }
