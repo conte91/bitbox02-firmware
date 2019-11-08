@@ -417,10 +417,13 @@ class SendMessageBitBoxBase:
             return
         print("User aborted")
 
+    def _display_status(self) -> None:
+        self._device.display_status(2000)
+
     def _menu(self) -> None:
         """Print the menu"""
         choices = (
-            ("Display random number", self._display_random),
+            ("Display status", self._display_status),
             ("Reboot into bootloader", self._reboot_bootloader),
         )
         choice = ask_user(choices)

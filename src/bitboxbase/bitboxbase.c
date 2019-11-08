@@ -26,6 +26,8 @@
 #include "usb/usb_processing.h"
 #include "util.h"
 #include "workflow/workflow.h"
+#include "rust/bitbox02_rust.h"
+#include "bitboxbase_background.h"
 
 #include <stdlib.h>
 
@@ -45,6 +47,7 @@ int main(void)
     hww_setup();
     common_main();
     traceln("%s", "Device initialized");
+    bitboxbase_background();
     for (;;) {
         screen_process();
         usart_receive();
