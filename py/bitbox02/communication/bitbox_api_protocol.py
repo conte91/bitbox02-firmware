@@ -343,6 +343,7 @@ class BitBoxAPIExchanger:
             print(response)
         return response
 
+
 class BitBoxCommonAPI:
     def __init__(self):
         pass
@@ -391,4 +392,3 @@ class BitBoxCommonAPI:
         unlocked_byte = response[0]
         unlocked = {0x00: False, 0x01: True}[unlocked_byte]
         return (version_str, platform, edition, unlocked)
-

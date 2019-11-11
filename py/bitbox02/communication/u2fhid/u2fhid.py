@@ -44,7 +44,6 @@ CID_BROADCAST = 0xFFFFFFFF
 
 # U2F-over-HID transport layer
 class U2FHid(TransportLayer):
-
     def __init__(self, hid_device: PhysicalLayer):
         self.device = hid_device
 
@@ -52,7 +51,6 @@ class U2FHid(TransportLayer):
         """Generate a valid CID"""
         # Exclude 0 and u32_max (0xffff_ffff)
         return random.randrange(1, 0xFFFFFFFF)
-
 
     # TODO: Create exceptions
     def _throw_error(error_code: int) -> None:
@@ -69,7 +67,6 @@ class U2FHid(TransportLayer):
         if error_code == ERR_OTHER:
             raise Exception("Received unknown error")
         raise Exception("Received error: %d" % error_code)
-
 
     def write(self, data: bytes, cmd: int, cid: int) -> None:
         """
@@ -118,7 +115,6 @@ class U2FHid(TransportLayer):
             idx += len(buf)
             single_empty_write = False
 
-
     def read(self, cmd: int, cid: int, timeout: int = 5000) -> bytes:
         """
         Receive data from the device.
@@ -151,7 +147,9 @@ class U2FHid(TransportLayer):
                 # CONT response
                 buf = self.device.read(USB_REPORT_SIZE, timeout_ms)
                 if len(buf) < 3:
-                    raise Exception("Did not receive a continuation frame after %d seconds" % timeout)
+                    raise Exception(
+                        "Did not receive a continuation frame after %d seconds" % timeout
+                    )
                 data += buf[5:]
                 idx += len(buf) - 5
             if reply_cid != cid:
