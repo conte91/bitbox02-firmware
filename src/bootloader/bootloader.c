@@ -14,7 +14,7 @@
 
 #include "bootloader.h"
 #include "bootloader_version.h"
-#include "mpu.h"
+#include "mpu_regions.h"
 
 #include <driver_init.h>
 #include <stdint.h>
@@ -237,7 +237,7 @@ static void _binary_exec(void)
     rand_sync_disable(&RAND_0);
 
     // Update MPU settings for firmware mode
-    mpu_firmware_init();
+    mpu_regions_firmware_init();
 
     __disable_irq();
     for (i = 0; i < 8; i++) {

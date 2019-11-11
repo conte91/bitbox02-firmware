@@ -26,6 +26,7 @@ set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/sd.c
   ${CMAKE_SOURCE_DIR}/src/hww.c
   ${CMAKE_SOURCE_DIR}/src/memory.c
+  ${CMAKE_SOURCE_DIR}/src/mpu.c
   ${CMAKE_SOURCE_DIR}/src/salt.c
   ${CMAKE_SOURCE_DIR}/src/i2c_ecc.c
   ${CMAKE_SOURCE_DIR}/src/touch/gestures.c
@@ -121,7 +122,8 @@ set(DBB-BOOTLOADER-SOURCES
   ${CMAKE_SOURCE_DIR}/src/pukcc/pukcc.c
   ${CMAKE_SOURCE_DIR}/src/bootloader/bootloader.c
   ${CMAKE_SOURCE_DIR}/src/bootloader/startup.c
-  ${CMAKE_SOURCE_DIR}/src/bootloader/mpu.c
+  ${CMAKE_SOURCE_DIR}/src/bootloader/mpu_regions.c
+  ${CMAKE_SOURCE_DIR}/src/mpu.c
   ${CMAKE_SOURCE_DIR}/src/ui/ugui/ugui.c
   ${CMAKE_SOURCE_DIR}/src/ui/fonts/font_a_9X9.c
   ${CMAKE_SOURCE_DIR}/src/screen.c
