@@ -48,7 +48,11 @@ def get_bitbox_and_reboot() -> devices.DeviceInfo:
         print("Please compare and confirm the pairing code on your BitBox02:")
         print(code)
 
-    bitbox = BitBox02(device=communication.u2fhid.U2FHid(hid_dev), device_info=device, show_pairing_callback=_show_pairing)
+    bitbox = BitBox02(
+        device=communication.u2fhid.U2FHid(hid_dev),
+        device_info=device,
+        show_pairing_callback=_show_pairing,
+    )
     bitbox.reboot()
 
     # wait for it to reboot
@@ -61,6 +65,7 @@ def get_bitbox_and_reboot() -> devices.DeviceInfo:
             sleep(1)
             continue
         return bootloader_device
+
 
 def find_and_open_usb_bitbox() -> (dict, communication.TransportLayer):
     bootloader_device = None
@@ -88,6 +93,7 @@ def find_and_open_usb_bitbox() -> (dict, communication.TransportLayer):
     hid_dev.open_path(bootloader_device["path"])
     return bootloader_device, communication.u2fhid.U2FHid(hid_dev)
 
+
 def try_usart_bootloader_connection(serial_port, bootloader_device) -> str:
     transport = communication.usart.U2FUsart(serial_port)
     try:
@@ -104,6 +110,7 @@ def try_usart_bootloader_connection(serial_port, bootloader_device) -> str:
     finally:
         bootloader_attempt.close()
     return success
+
 
 def find_and_open_usart_bitbox(serial_port) -> (dict, communication.TransportLayer):
     print("Connecting to BitBox bootloader over UART.")
@@ -122,6 +129,7 @@ def find_and_open_usart_bitbox(serial_port) -> (dict, communication.TransportLay
 
     def _show_pairing(code: str) -> None:
         print("Accept the pairing request on your device...")
+
     try:
         transport = communication.usart.U2FUsart(serial_port)
         bitbox_attempt = BitBox02(transport, bootloader_device, show_pairing_callback=_show_pairing)
@@ -144,10 +152,17 @@ def find_and_open_usart_bitbox(serial_port) -> (dict, communication.TransportLay
         else:
             print("Stuck in bitbox mode -  didn't reboot properly!")
 
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Tool for flashing a new firmware on BitBox devices.")
+    parser = argparse.ArgumentParser(
+        description="Tool for flashing a new firmware on BitBox devices."
+    )
     parser.add_argument("--debug", action="store_true", help="Flash a debug (unsigned) firmware.")
-    parser.add_argument("--usart", action="store", help="Flash firmware using U2F-over-UART (BitBoxBase), with the specified serial port.")
+    parser.add_argument(
+        "--usart",
+        action="store",
+        help="Flash firmware using U2F-over-UART (BitBoxBase), with the specified serial port.",
+    )
     parser.add_argument("firmware", nargs=1, help="Firmware to flash.")
     args = parser.parse_args()
 
@@ -156,11 +171,11 @@ def main() -> int:
         eprint("Expecting firmware to end with '.signed.bin'")
         return 1
 
-    if (args.usart is not None):
-            serial_port = serial.Serial(args.usart, 115200, timeout=3)
-            bootloader_device = find_and_open_usart_bitbox(serial_port)
-            transport = communication.usart.U2FUsart(serial_port)
-            bootloader = Bootloader(transport, bootloader_device)
+    if args.usart is not None:
+        serial_port = serial.Serial(args.usart, 115200, timeout=3)
+        bootloader_device = find_and_open_usart_bitbox(serial_port)
+        transport = communication.usart.U2FUsart(serial_port)
+        bootloader = Bootloader(transport, bootloader_device)
     else:
         bootloader_device, transport = find_and_open_usb_bitbox()
     bootloader = Bootloader(transport, bootloader_device)

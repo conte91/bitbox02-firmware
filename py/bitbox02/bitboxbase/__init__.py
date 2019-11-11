@@ -37,6 +37,4 @@ except AttributeError:
     sys.exit(1)
 
 # pylint: disable=wrong-import-position
-from .bitboxbase import (
-    BitBoxBase,
-)
+from .bitboxbase import BitBoxBase

@@ -16,6 +16,7 @@
 
 from typing_extensions import Protocol
 
+
 class TransportLayer(Protocol):
     # pylint: disable=unused-argument,no-self-use
     def write(self, endpoint: int, msg: bytes, cid: int) -> None:
@@ -35,6 +36,7 @@ class TransportLayer(Protocol):
     def close(self) -> None:
         ...
 
+
 class PhysicalLayer(Protocol):
     # pylint: disable=unused-argument,no-self-use
     def write(self, msg: bytes) -> None:
@@ -42,4 +44,3 @@ class PhysicalLayer(Protocol):
 
     def read(self, size: int, timeout_ms: int) -> bytes:
         ...
-

@@ -17,6 +17,7 @@ from bitbox02.devices import parse_device_version, DeviceInfo
 from typing import Optional, Callable
 import communication
 
+
 class BitBoxBase(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI):
     """Class to communicate with a BitBox02"""
 
@@ -29,6 +30,7 @@ class BitBoxBase(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI
         show_pairing_callback: Callable[[str], None],
         attestation_check_callback: Optional[Callable[[bool], None]] = None,
     ):
-        communication.BitBoxAPIExchanger.__init__(self, device, device_info, show_pairing_callback, attestation_check_callback)
+        communication.BitBoxAPIExchanger.__init__(
+            self, device, device_info, show_pairing_callback, attestation_check_callback
+        )
         communication.BitBoxCommonAPI.__init__(self)
-

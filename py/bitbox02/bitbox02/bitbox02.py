@@ -187,7 +187,9 @@ class BitBox02(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI):
         show_pairing_callback: Callable[[str], None],
         attestation_check_callback: Optional[Callable[[bool], None]] = None,
     ):
-        communication.BitBoxAPIExchanger.__init__(self, device, device_info, show_pairing_callback, attestation_check_callback)
+        communication.BitBoxAPIExchanger.__init__(
+            self, device, device_info, show_pairing_callback, attestation_check_callback
+        )
         communication.BitBoxCommonAPI.__init__(self)
 
     def get_info(self) -> Tuple[str, Platform, Union[BitBox02Edition, BitBoxBaseEdition], bool]:

@@ -15,4 +15,4 @@
 
 import sys
 
-from .usart import (U2FUsart, U2FUsartError, U2FUsartErrorResponse, U2FUsartTimeoutError)
+from .usart import U2FUsart, U2FUsartError, U2FUsartErrorResponse, U2FUsartTimeoutError
