@@ -31,7 +31,9 @@ class BitBoxBase(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI
         show_pairing_callback: Callable[[str], None],
         attestation_check_callback: Optional[Callable[[bool], None]] = None,
     ):
-        communication.BitBoxAPIExchanger.__init__(self, device, device_info, show_pairing_callback, attestation_check_callback)
+        communication.BitBoxAPIExchanger.__init__(
+            self, device, device_info, show_pairing_callback, attestation_check_callback
+        )
         communication.BitBoxCommonAPI.__init__(self)
 
     def _bitboxbase_query(self, bbb_request: bbb.BitBoxBaseRequest) -> None:
@@ -57,4 +59,3 @@ class BitBoxBase(communication.BitBoxAPIExchanger, communication.BitBoxCommonAPI
         request = bbb.BitBoxBaseRequest()
         request.display_status.CopyFrom(bbb.BitBoxBaseDisplayStatusRequest(duration=duration))
         self._bitboxbase_query(request)
-

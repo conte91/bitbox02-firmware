@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Library to interact with a BitBoxBase device. """
 
-import sys
+"""Abstraction for the transport layer used for transmitting U2F messages."""
 
-from .usart import U2FUsart, U2FUsartError, U2FUsartErrorResponse, U2FUsartTimeoutError
+from .communication import *
+from .bitbox_api_protocol import *
+from .u2fhid import *
+from .usart import *

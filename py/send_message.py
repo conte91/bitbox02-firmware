@@ -635,12 +635,93 @@ def connect_to_usart_bitboxbase(debug: bool, serial_port):
     bootloader = bitbox02.Bootloader(transport, bootloader_device)
     return SendMessageBootloader(bootloader).run()
 
+def connect_to_usb_bitbox(debug: bool) -> int:
+    try:
+        bitbox = bitbox02.get_any_bitbox02()
+    except bitbox02.TooManyFoundException:
+        print("Multiple bitboxes detected. Only one supported")
+        return 1
+    except bitbox02.NoneFoundException:
+        try:
+            bootloader = bitbox02.get_any_bitbox02_bootloader()
+        except bitbox02.TooManyFoundException:
+            print("Multiple bitbox bootloaders detected. Only one supported")
+        except bitbox02.NoneFoundException:
+            print("Neither bitbox nor bootloader found.")
+        else:
+            boot_app = SendMessageBootloader(bitbox02.Bootloader(bootloader))
+            return boot_app.run()
+    else:
+
+        def show_pairing(code: str) -> None:
+            print("Please compare and confirm the pairing code on your BitBox02:")
+            print(code)
+
+        def attestation_check(result: bool) -> None:
+            if result:
+                print("Device attestation PASSED")
+            else:
+                print("Device attestation FAILED")
+
+        device = bitbox02.BitBox02(
+            device_info=bitbox,
+            show_pairing_callback=show_pairing,
+            attestation_check_callback=attestation_check,
+        )
+
+        if debug:
+            print("Device Info:")
+            pprint.pprint(bitbox)
+        return SendMessage(device, debug).run()
+
+
+def connect_to_usart_bitboxbase(debug: bool, serial_port):
+    print("Trying to connect to BitBoxBase firmware...")
+    bootloader_device = {"serial_number": "v4.2.0", "product_string": "bb02-base"}
+
+    def show_pairing(code: str) -> None:
+        print("(Pairing should be automatic) Pairing code:")
+        print(code)
+
+    def attestation_check(result: bool) -> None:
+        if result:
+            print("Device attestation PASSED")
+        else:
+            print("Device attestation FAILED")
+
+    try:
+        transport = communication.usart.U2FUsart(serial_port)
+        base_dev = bitboxbase.BitBoxBase(
+            transport,
+            bootloader_device,
+            show_pairing_callback=show_pairing,
+            attestation_check_callback=attestation_check,
+        )
+        if debug:
+            print("Device Info:")
+            pprint.pprint(base_dev)
+        return SendMessageBitBoxBase(base_dev, debug).run()
+    except U2FUsartErrorResponse as e:
+        if e.error_code != U2FUsartErrorResponse.ErrorCode.USART_FRAME_ERROR_ENDPOINT_UNAVAILABLE:
+            raise
+    except U2FUsartTimeoutError:
+        print("Timed out. Maybe the device is not connected?", file=sys.stderr)
+        return 1
+
+    print("BitBox unavailable. Starting bootloader connection.")
+    transport = communication.usart.U2FUsart(serial_port)
+    bootloader = bitbox02.Bootloader(transport, bootloader_device)
+    return SendMessageBootloader(bootloader).run()
+
+
 def main() -> int:
     """Main function"""
     parser = argparse.ArgumentParser(description="Tool for communicating with bitbox device")
     parser.add_argument("--debug", action="store_true", help="Print messages sent and received")
     parser.add_argument("--u2f", action="store_true", help="Use u2f menu instead")
-    parser.add_argument("--usart", action="store", help="Use USART (BitBoxBase) on the specified serial port.")
+    parser.add_argument(
+        "--usart", action="store", help="Use USART (BitBoxBase) on the specified serial port."
+    )
     args = parser.parse_args()
 
     if args.u2f:
@@ -666,12 +747,11 @@ def main() -> int:
         else:
             print("Device attestation FAILED")
 
-    if (args.usart is not None):
+    if args.usart is not None:
         with serial.Serial(args.usart, 115200) as serial_port:
             return connect_to_usart_bitboxbase(args.debug, serial_port)
     else:
-         return connect_to_usb_bitbox(args.debug)
-
+        return connect_to_usb_bitbox(args.debug)
 
     if args.debug:
         print("Device Info:")
