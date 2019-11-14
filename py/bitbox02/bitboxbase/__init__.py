@@ -11,8 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Library to interact with a BitBoxBase device. """
 
-"""Abstraction for the transport layer used for transmitting U2F messages."""
+import sys
 
-from .communication import *
-from .bitbox_api_protocol import *
+if sys.version_info.major != 3 or sys.version_info.minor < 6:
+    print(
+        "Python version is {}.{}, but 3.6+ is required by this script.".format(
+            sys.version_info.major, sys.version_info.minor
+        ),
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+# pylint: disable=wrong-import-position
+from .bitboxbase import BitBoxBase
