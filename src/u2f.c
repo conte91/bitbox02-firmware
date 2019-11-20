@@ -83,7 +83,6 @@ static const uint8_t _hijack_code[U2F_HIJACK_ORIGIN_TOTAL][U2F_APPID_SIZE] = {
     }};
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 
 typedef struct __attribute__((__packed__)) {

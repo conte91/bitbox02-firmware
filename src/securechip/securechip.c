@@ -67,7 +67,6 @@ static uint8_t _configuration[ATCA_ECC_CONFIG_SIZE] = {
 #define DATA_PUBLIC_KEY_SLOT_BLOCK_SIZE 32
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 typedef union {
     struct __attribute__((__packed__)) {

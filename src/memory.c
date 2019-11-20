@@ -53,7 +53,6 @@
 #endif
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 // Packed so there is no padding between the fields,
 // making the layout more explicit.

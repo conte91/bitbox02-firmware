@@ -62,7 +62,6 @@ typedef struct {
 } U2FHID_INIT_REQ;
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 typedef struct __attribute__((__packed__)) {
     uint8_t nonce[U2FHID_INIT_NONCE_SIZE];

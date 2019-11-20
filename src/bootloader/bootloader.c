@@ -99,7 +99,6 @@ COMPILER_PACK_RESET()
 #define BOOT_SIG_LEN 64u
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 // Packed to make the layout more explicit.
 // Total size equals min erase granularity

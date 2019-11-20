@@ -11,7 +11,6 @@
 #include <stdint.h>
 
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
 #pragma GCC diagnostic ignored "-Wattributes"
 
 // General constants
