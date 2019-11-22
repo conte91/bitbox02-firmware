@@ -89,6 +89,7 @@ set(TEST_LIST
   button_tap
   confirm_bip39
   entry_screen
+  mpu
   scroll_menu
   scroll_menu_2
   simple_slide
@@ -147,3 +148,6 @@ foreach(name ${TEST_LIST})
   add_dependencies(device-tests ${elf})
   endif()
 endforeach()
+
+# We need the "asm" extension for the MPU test.
+set_target_properties(fw_test_mpu.elf PROPERTIES COMPILE_FLAGS "-std=gnu99")
