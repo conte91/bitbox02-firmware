@@ -52,6 +52,13 @@ static void _screen_sprintf_debug(int duration, const char* fmt, ...)
     _screen_print_debug(print, duration);
 }
 
+#define ABORT(...)                             \
+    do {                                       \
+        _screen_sprintf_debug(0, __VA_ARGS__); \
+        while (1)                              \
+            ;                                  \
+    } while (0);
+
 /**
  * This flag will be set to 0
  * before performing a risky memory access.
@@ -100,6 +107,80 @@ static void list_to_string(char* buf, size_t buf_size, uint8_t* numbers, size_t 
 #define N_FLASH_PAGES (2048)
 #define N_BLOCKS (N_FLASH_PAGES / FLASH_ERASE_PAGE_NUM)
 
+static bool _is_within_mpu_region(uintptr_t region_start, uintptr_t region_len, uintptr_t base_addr)
+{
+    return base_addr >= region_start && base_addr < (region_start + region_len);
+}
+
+static bool _write_should_trigger_memmanage(uintptr_t base_addr)
+{
+    if (_is_within_mpu_region(HSRAM_ADDR, HSRAM_SIZE, base_addr)) {
+        return false;
+    }
+    if (_is_within_mpu_region(FLASH_SHARED_DATA_START, FLASH_SHARED_DATA_LEN, base_addr)) {
+        return false;
+    }
+    if (_is_within_mpu_region(FLASH_APPDATA_START, FLASH_APPDATA_LEN, base_addr)) {
+        return false;
+    }
+    return true;
+}
+
+static bool _write_should_trigger_hardfault(uintptr_t base_addr)
+{
+    /*
+     * FUTURE: SmartEEPROM-reserved flash area triggers hardfaults
+     * if SmartEEPROM is enabled.
+     */
+    (void)base_addr;
+    return false;
+}
+
+static void _check_write_permissions(uint8_t block_number)
+{
+    size_t chunk_size = FLASH_PAGE_SIZE * FLASH_ERASE_PAGE_NUM;
+    uintptr_t base_addr = block_number * chunk_size;
+
+    uint8_t chunk[chunk_size];
+
+    /* Read the chunk so we can copy it back intact. */
+    _memmanage_called = false;
+    _hardfault_called = false;
+
+    memcpy(chunk, (void*)base_addr, chunk_size);
+    if (_memmanage_called || _hardfault_called) {
+        ABORT("Couldn't read chunk #%u!", block_number);
+    }
+
+    _memmanage_called = false;
+    _hardfault_called = false;
+    if (flash_write(&FLASH_0, base_addr, chunk, chunk_size) != ERR_NONE) {
+        ABORT("Writing back to flash block #%u failed.\n", block_number);
+    }
+    if (_memmanage_called != _write_should_trigger_memmanage(base_addr)) {
+        if (_memmanage_called) {
+            ABORT(
+                "Writing to block #%u shouldn't trigger MemManage_Handler, but it did.",
+                block_number);
+        } else {
+            ABORT(
+                "Writing to block #%u should have triggered MemManage_Handler, but it didn't.",
+                block_number);
+        }
+    }
+    if (_hardfault_called != _write_should_trigger_hardfault(base_addr)) {
+        if (_hardfault_called) {
+            ABORT(
+                "Writing to block #%u shouldn't trigger HardFault_Handler, but it did.",
+                block_number);
+        } else {
+            ABORT(
+                "Writing to block #%u should have triggered HardFault_Handler, but it didn't.",
+                block_number);
+        }
+    }
+}
+
 int main(void)
 {
     init_mcu();
@@ -138,12 +219,19 @@ int main(void)
         read_value = *((uint64_t*)base_addr);
         (void)read_value;
 
+        bool success = true;
         if (_memmanage_called) {
             mem_errors[n_mem_errors] = i;
             n_mem_errors++;
+            success = false;
         } else if (_hardfault_called) {
             hardfault_errors[n_hardfault_errors] = i;
             n_hardfault_errors++;
+            success = false;
+        }
+        /* Don't check write permissions if we couldn't even read the page. */
+        if (success) {
+            _check_write_permissions(i);
         }
     }
 
