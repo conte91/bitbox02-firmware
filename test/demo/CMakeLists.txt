@@ -16,44 +16,20 @@
 #-----------------------------------------------------------------------------
 # Source files
 
-set(INCLUDES ${TEST_COMMON_INCLUDES} "include/")
+set(INCLUDES ${TEST_COMMON_INCLUDES})
 
 include_directories(${NANOPB_INCLUDE_DIRS})
 
-set(BB02_TEST_LIST
-  all_variants_menu
-  backup
-  bip39
-  button_tap
-  confirm_bip39
-  entry_screen
-  scroll_menu
-  scroll_menu_2
-  simple_slide
-  slide_info
-  ssp
-  tap_menu
-  trace
-  usb_cmd_process
-  usb_composed_ep_in
-  usb_composed_ep_out
-  usb_d_init
-  usb_hww_ep_in
-  usb_hww_ep_out
-  usb_u2f_ep_in
-  usb_u2f_ep_out
-  usbdc_init
-  write_sd
-)
+set(BB02_DEMO_LIST)
 
-add_custom_target(device-tests)
+add_custom_target(demo)
 
-foreach(name ${BB02_TEST_LIST})
-  set(elf fw_test_${name}.elf)
+foreach(name ${BB02_DEMO_LIST})
+  set(elf ${name}.elf)
   add_executable(${elf} ${CMAKE_CURRENT_SOURCE_DIR}/src/test_${name}.c)
 
   target_include_directories(${elf} PRIVATE ${INCLUDES})
-  target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_CURRENT_SOURCE_DIR}/device-test.ld\"")
+  target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_SOURCE_DIR}/src/firmware.ld\"")
   target_link_libraries(${elf} PRIVATE -Wl,--defsym=STACK_SIZE=${STACK_SIZE} -Wl,-defsym=HEAP_SIZE=${HEAP_SIZE})
 
   # Since noiseprotocol and wallycore are external projects we need to specify the dependency
@@ -64,7 +40,7 @@ foreach(name ${BB02_TEST_LIST})
   target_link_libraries(${elf}
     PRIVATE
       c
-      bitbox02-standard-semihosting
+      bitbox02-standard
       asf4-drivers-min
       ${QTOUCHLIB_A}
       ${QTOUCHLIB_B}
@@ -74,29 +50,29 @@ foreach(name ${BB02_TEST_LIST})
   add_custom_command(
     TARGET ${elf} POST_BUILD
     COMMAND ${CMAKE_SIZE} ${elf}
-    COMMAND ${CMAKE_OBJCOPY} -O binary ${elf} fw_test_${name}.bin
+    COMMAND ${CMAKE_OBJCOPY} -O binary ${elf} ${name}.bin
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    COMMENT "\nGenerating binary fw_test_${name}.bin"
+    COMMENT "\nGenerating binary ${name}.bin"
   )
   if(PYTHONINTERP_FOUND)
     execute_process(
-      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/expand_template ${CMAKE_SOURCE_DIR}/scripts/template-firmware.jlink file=build/bin/fw_test_${name}.bin -o fw_test_${name}.jlink
+      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/expand_template ${CMAKE_SOURCE_DIR}/scripts/template-firmware.jlink file=build/bin/${name}.bin -o ${name}.jlink
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-  add_dependencies(device-tests ${elf})
+  add_dependencies(demo ${elf})
   endif()
 endforeach()
 
-set(BBB_TEST_LIST
-  bitboxbase_touch_demo
+set(BBB_DEMO_LIST
+  hsm_led_show
 )
 
-foreach(name ${BBB_TEST_LIST})
-  set(elf fw_test_${name}.elf)
-  add_executable(${elf} ${CMAKE_CURRENT_SOURCE_DIR}/src/test_${name}.c)
+foreach(name ${BBB_DEMO_LIST})
+  set(elf ${name}.elf)
+  add_executable(${elf} ${CMAKE_CURRENT_SOURCE_DIR}/src/${name}.c)
 
   target_include_directories(${elf} PRIVATE ${INCLUDES})
-  target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_CURRENT_SOURCE_DIR}/device-test.ld\"")
+  target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_SOURCE_DIR}/firmware.ld\"")
   target_link_libraries(${elf} PRIVATE -Wl,--defsym=STACK_SIZE=${STACK_SIZE} -Wl,-defsym=HEAP_SIZE=${HEAP_SIZE})
 
   # Since noiseprotocol and wallycore are external projects we need to specify the dependency
@@ -108,7 +84,7 @@ foreach(name ${BBB_TEST_LIST})
     PRIVATE
       asf4-drivers-min
       asf4-drivers
-      bitboxbase-standard-semihosting
+      bitboxbase-standard
       c
       ${QTOUCHLIB_A}
       ${QTOUCHLIB_B}
@@ -118,15 +94,15 @@ foreach(name ${BBB_TEST_LIST})
   add_custom_command(
     TARGET ${elf} POST_BUILD
     COMMAND ${CMAKE_SIZE} ${elf}
-    COMMAND ${CMAKE_OBJCOPY} -O binary ${elf} fw_test_${name}.bin
+    COMMAND ${CMAKE_OBJCOPY} -O binary ${elf} ${name}.bin
     WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    COMMENT "\nGenerating binary fw_test_${name}.bin"
+    COMMENT "\nGenerating binary ${name}.bin"
   )
   if(PYTHONINTERP_FOUND)
     execute_process(
-      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/expand_template ${CMAKE_SOURCE_DIR}/scripts/template-firmware.jlink file=build/bin/fw_test_${name}.bin -o fw_test_${name}.jlink
+      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/expand_template ${CMAKE_SOURCE_DIR}/scripts/template-firmware.jlink file=build/bin/${name}.bin -o ${name}.jlink
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-  add_dependencies(device-tests ${elf})
+  add_dependencies(demo ${elf})
   endif()
 endforeach()

@@ -65,6 +65,9 @@ factory-setup-bitboxbase: | build
 	$(MAKE) -C build factory-setup-bitboxbase.elf
 docs: | build
 	$(MAKE) -C build doc
+demos: | build
+	${MAKE} -C build demo
+# Must compile C tests before running them
 unit-test: | build-build
 	$(MAKE) -C build-build
 device-tests: | build

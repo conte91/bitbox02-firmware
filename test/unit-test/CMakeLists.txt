@@ -65,10 +65,9 @@ target_include_directories(
 target_include_directories(
   bitbox
   PUBLIC
-  ${INCLUDES}
+  ${TEST_COMMON_INCLUDES}
   ${CMAKE_CURRENT_SOURCE_DIR}/framework/includes
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_BINARY_DIR}/src
 )
 
 set_source_files_properties(
