@@ -64,6 +64,7 @@ foreach(name ${BB02_DEMO_LIST})
 endforeach()
 
 set(BBB_DEMO_LIST
+  bitboxbase_touch_demo
   hsm_led_show
 )
 

@@ -87,9 +87,7 @@ foreach(name ${BB02_TEST_LIST})
   endif()
 endforeach()
 
-set(BBB_TEST_LIST
-  bitboxbase_touch_demo
-)
+set(BBB_TEST_LIST)
 
 foreach(name ${BBB_TEST_LIST})
   set(elf fw_test_${name}.elf)
