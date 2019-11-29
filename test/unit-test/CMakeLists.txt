@@ -65,7 +65,7 @@ target_include_directories(
 target_include_directories(
   bitbox
   PUBLIC
-  ${TEST_COMMON_INCLUDES}
+  ${TEST_INCLUDES}
   ${CMAKE_CURRENT_SOURCE_DIR}/framework/includes
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -125,7 +125,7 @@ target_include_directories(
 target_include_directories(
   u2f-util
   PUBLIC
-  ${INCLUDES}
+  ${TEST_INCLUDES}
   ${CMAKE_BINARY_DIR}/src
 )
 target_compile_definitions(u2f-util PUBLIC "TESTING" PRODUCT_BITBOX_MULTI)

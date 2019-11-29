@@ -16,7 +16,11 @@
 #-----------------------------------------------------------------------------
 # Source files
 
-set(INCLUDES ${TEST_COMMON_INCLUDES} "include/")
+# CMake is a bit retarted and doesn't keep some properties between directories...
+set_source_files_properties(
+  ${DBB-FIRMWARE-PROTOBUF-SOURCES}
+  PROPERTIES GENERATED TRUE
+)
 
 include_directories(${NANOPB_INCLUDE_DIRS})
 
@@ -47,14 +51,26 @@ set(BB02_TEST_LIST
 )
 
 add_custom_target(device-tests)
+add_library(device-tests-common ${CMAKE_CURRENT_SOURCE_DIR}/src/framework/test_common.c)
+target_include_directories(device-tests-common PUBLIC ${TEST_INCLUDES})
+target_link_libraries(device-tests-common
+    bitbox02-standard-semihosting
+    asf4-drivers-min
+    ${QTOUCHLIB_A}
+    ${QTOUCHLIB_B}
+    ${QTOUCHLIB_T}
+    )
 
 foreach(name ${BB02_TEST_LIST})
   set(elf fw_test_${name}.elf)
   add_executable(${elf} ${CMAKE_CURRENT_SOURCE_DIR}/src/test_${name}.c)
 
-  target_include_directories(${elf} PRIVATE ${INCLUDES})
+  message("INCLUDES: ${TEST_INCLUDES}")
+  #target_include_directories(${elf} PRIVATE ${INCLUDES})
   target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_CURRENT_SOURCE_DIR}/device-test.ld\"")
   target_link_libraries(${elf} PRIVATE -Wl,--defsym=STACK_SIZE=${STACK_SIZE} -Wl,-defsym=HEAP_SIZE=${HEAP_SIZE})
+  target_link_libraries(${elf} PRIVATE --specs=nano.specs --specs=rdimon.specs)
+  target_compile_options(${elf} PRIVATE --specs=nano.specs --specs=rdimon.specs)
 
   # Since noiseprotocol and wallycore are external projects we need to specify the dependency
   add_dependencies(${elf} noise-c)
@@ -64,11 +80,7 @@ foreach(name ${BB02_TEST_LIST})
   target_link_libraries(${elf}
     PRIVATE
       c
-      bitbox02-standard-semihosting
-      asf4-drivers-min
-      ${QTOUCHLIB_A}
-      ${QTOUCHLIB_B}
-      ${QTOUCHLIB_T}
+      device-tests-common
   )
 
   add_custom_command(
@@ -93,7 +105,7 @@ foreach(name ${BBB_TEST_LIST})
   set(elf fw_test_${name}.elf)
   add_executable(${elf} ${CMAKE_CURRENT_SOURCE_DIR}/src/test_${name}.c)
 
-  target_include_directories(${elf} PRIVATE ${INCLUDES})
+  target_include_directories(${elf} PRIVATE ${TEST_INCLUDES})
   target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test_${name}.map\" -T\"${CMAKE_CURRENT_SOURCE_DIR}/device-test.ld\"")
   target_link_libraries(${elf} PRIVATE -Wl,--defsym=STACK_SIZE=${STACK_SIZE} -Wl,-defsym=HEAP_SIZE=${HEAP_SIZE})
 

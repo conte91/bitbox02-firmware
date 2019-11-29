@@ -13,28 +13,16 @@
 // limitations under the License.
 
 #include "common_main.h"
-#include "driver_init.h"
 #include "hardfault.h"
 #include "keystore.h"
 #include "memory.h"
+#include "platform/driver_init.h"
 #include "random.h"
 #include "screen.h"
 #include "securechip/securechip.h"
 #include "util.h"
+
 #include <wally_core.h>
-
-extern void __attribute__((noreturn)) __stack_chk_fail(void);
-void __attribute__((noreturn)) __stack_chk_fail(void)
-{
-    Abort("Stack smashing detected");
-    while (1) {
-    } // satisfy noreturn
-}
-
-uint32_t common_stack_chk_guard(void)
-{
-    return rand_sync_read32(&RAND_0);
-}
 
 static memory_interface_functions_t _memory_interface_functions = {
     // Use random_32_bytes_mcu over random_32_bytes as the latter mixes in

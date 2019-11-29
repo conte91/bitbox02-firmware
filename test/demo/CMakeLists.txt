@@ -16,7 +16,7 @@
 #-----------------------------------------------------------------------------
 # Source files
 
-set(INCLUDES ${TEST_COMMON_INCLUDES})
+set(INCLUDES ${TEST_INCLUDES})
 
 include_directories(${NANOPB_INCLUDE_DIRS})
 

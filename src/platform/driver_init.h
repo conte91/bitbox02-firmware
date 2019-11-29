@@ -40,9 +40,9 @@
 #include "platform_config.h"
 
 #if PLATFORM_BITBOX02 == 1
-#include <bitbox02_pins.h>
+#include "bitbox02_pins.h"
 #elif PLATFORM_BITBOXBASE == 1
-#include <bitboxbase_pins.h>
+#include "bitboxbase_pins.h"
 #endif
 
 #define SHA256_DIGEST_LENGTH 32
