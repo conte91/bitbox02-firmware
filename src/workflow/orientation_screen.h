@@ -12,32 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _UI_SCREEN_PROCESS_H_
-#define _UI_SCREEN_PROCESS_H_
+#ifndef __ORIENTATION_SCREEN_H
+#define __ORIENTATION_SCREEN_H
 
-#include "component.h"
-#include <stdbool.h>
-
-void ui_screen_render_component(component_t* component);
+#include "workflow.h"
 
 /**
- * Runs the UI once.
- *
- * This function will update the screen (if needed)
- * and process gesture-related events.
+ * Workflow to select the screen orientation and start
+ * the main bitbox activity afterwards.
  */
-void screen_process(void);
+workflow_t* orientation_screen(void);
 
-/**
- * Period of screen updates.
- * The screen is refreshed every SCREEN_FRAME_RATE event loops cycles.
- */
-#define SCREEN_FRAME_RATE 30
-
-/**
- * Renders the provided component on the display.
- *
- * @param[in] component Screen to draw.
- */
-void ui_draw(component_t* component);
-#endif
+#endif // __ORIENTATION_SCREEN_H

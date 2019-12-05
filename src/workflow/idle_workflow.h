@@ -12,32 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _UI_SCREEN_PROCESS_H_
-#define _UI_SCREEN_PROCESS_H_
+#ifndef __IDLE_WORKFLOW_H
+#define __IDLE_WORKFLOW_H
 
-#include "component.h"
-#include <stdbool.h>
-
-void ui_screen_render_component(component_t* component);
+#include "workflow.h"
 
 /**
- * Runs the UI once.
- *
- * This function will update the screen (if needed)
- * and process gesture-related events.
+ * Base "idle" workflow that runs when nothing else is being done on the device.
+ * When started, it will show the logo for a while and then switch
+ * to a screen saying "See the BitBox App".
  */
-void screen_process(void);
+workflow_t* idle_workflow(void);
 
-/**
- * Period of screen updates.
- * The screen is refreshed every SCREEN_FRAME_RATE event loops cycles.
- */
-#define SCREEN_FRAME_RATE 30
-
-/**
- * Renders the provided component on the display.
- *
- * @param[in] component Screen to draw.
- */
-void ui_draw(component_t* component);
-#endif
+#endif // __IDLE_WORKFLOW_H
