@@ -35,4 +35,29 @@ void workflow_start(void);
  */
 void workflow_start_orientation_screen(void);
 
+/**
+ * Typedef for a callback to be executed when a workflow is finishing.
+ * This can be used by the parent workflow to obtain information about
+ * the executed workflow's result.
+ */
+typedef void (*workflow_cb_t)(void*);
+
+/**
+ * Descriptor for a workflow to be run.
+ */
+typedef struct _workflow_t {
+    /* Starts the workflow */
+    void (*init)(struct _workflow_t*);
+    /* Stops the workflow and destroys the related resources. */
+    void (*cleanup)(struct _workflow_t*);
+    /* Private data (depends on the workflow type) */
+    void* data;
+    /* Function to get run at every cycle */
+    void (*spin)(struct _workflow_t*);
+} workflow_t;
+
+typedef void (*workflow_method)(workflow_t*);
+
+workflow_t* workflow_allocate(workflow_method init, workflow_method cleanup, workflow_method spin);
+
 #endif
