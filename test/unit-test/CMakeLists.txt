@@ -168,7 +168,7 @@ set(TEST_LIST
    app_btc_common
    ""
    app_btc_confirm_locktime_rbf
-   "-Wl,--wrap=workflow_confirm,--wrap=workflow_status_create"
+   "-Wl,--wrap=workflow_confirm_blocking,--wrap=workflow_status_create"
    sd
    ""
    ui_components
@@ -206,15 +206,15 @@ set(TEST_LIST
    util
    ""
    commander_set_device_name
-   "-Wl,--wrap=workflow_confirm_scrollable,--wrap=memory_set_device_name"
+   "-Wl,--wrap=workflow_confirm_scrollable_blocking,--wrap=memory_set_device_name"
    commander_set_mnemonic_passphrase_enabled
-   "-Wl,--wrap=workflow_confirm,--wrap=memory_set_mnemonic_passphrase_enabled"
+   "-Wl,--wrap=workflow_confirm_blocking,--wrap=memory_set_mnemonic_passphrase_enabled"
    workflow_blocking
    "-Wl,--wrap=screen_process"
    workflow_status
    "-Wl,--wrap=ui_screen_stack_push,--wrap=ui_screen_stack_pop,--wrap=status_create,--wrap=workflow_blocking_block,--wrap=workflow_blocking_unblock"
    workflow_cancel
-   "-Wl,--wrap=ui_screen_stack_push,--wrap=ui_screen_stack_pop,--wrap=workflow_blocking_unblock,--wrap=workflow_blocking_block,--wrap=workflow_confirm,--wrap=workflow_status_create"
+   "-Wl,--wrap=ui_screen_stack_push,--wrap=ui_screen_stack_pop,--wrap=workflow_blocking_unblock,--wrap=workflow_blocking_block,--wrap=workflow_confirm_blocking,--wrap=workflow_status_create"
 )
 
 find_package(CMocka REQUIRED)

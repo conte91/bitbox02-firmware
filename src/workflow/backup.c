@@ -132,11 +132,11 @@ bool workflow_backup_check(char* id_out, bool silent)
         return false;
     case BACKUP_OK:
         if (!silent) {
-            if (!workflow_confirm_scrollable("Name?", backup_name, NULL, false)) {
+            if (!workflow_confirm_scrollable_blocking("Name?", backup_name, NULL, false)) {
                 // TODO Change to error "User Abort"
                 return false;
             }
-            if (!workflow_confirm_scrollable("ID?", id_out, NULL, false)) {
+            if (!workflow_confirm_scrollable_blocking("ID?", id_out, NULL, false)) {
                 // TODO Change to error "User Abort"
                 return false;
             }

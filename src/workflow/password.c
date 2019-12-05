@@ -45,7 +45,7 @@ bool password_set(char* password_out)
         return false;
     }
     if (strlen(password) < 4) {
-        if (!workflow_confirm(
+        if (!workflow_confirm_blocking(
                 "WARNING",
                 "Your password\n has fewer than\n 4 characters.\nContinue?",
                 NULL,

@@ -123,7 +123,7 @@ static commander_error_t _api_get_info(DeviceInfoResponse* device_info)
 
 static commander_error_t _api_set_device_name(const SetDeviceNameRequest* request)
 {
-    if (!workflow_confirm_scrollable("Name", request->name, NULL, false)) {
+    if (!workflow_confirm_scrollable_blocking("Name", request->name, NULL, false)) {
         return COMMANDER_ERR_USER_ABORT;
     }
     if (!memory_set_device_name(request->name)) {
@@ -209,7 +209,7 @@ static commander_error_t _api_get_root_fingerprint(RootFingerprintResponse* resp
 static commander_error_t _api_set_mnemonic_passphrase_enabled(
     const SetMnemonicPassphraseEnabledRequest* request)
 {
-    if (!workflow_confirm(
+    if (!workflow_confirm_blocking(
             request->enabled ? "Enable" : "Disable", "Optional\npassphrase", NULL, true, false)) {
         return COMMANDER_ERR_USER_ABORT;
     }

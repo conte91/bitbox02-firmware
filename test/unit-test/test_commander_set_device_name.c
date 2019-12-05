@@ -19,7 +19,10 @@
 
 #include <test_commander.h>
 
-bool __wrap_workflow_confirm_scrollable(const char* title, const char* body, bool accept_only)
+bool __wrap_workflow_confirm_scrollable_blocking(
+    const char* title,
+    const char* body,
+    bool accept_only)
 {
     check_expected(title);
     check_expected(body);
@@ -33,21 +36,21 @@ static void _test_api_set_device_name(void** state)
         .name = "Mia",
     };
 
-    expect_string_count(__wrap_workflow_confirm_scrollable, title, "Name", -1);
-    expect_string_count(__wrap_workflow_confirm_scrollable, body, request.name, -1);
-    expect_value_count(__wrap_workflow_confirm_scrollable, accept_only, false, -1);
+    expect_string_count(__wrap_workflow_confirm_scrollable_blocking, title, "Name", -1);
+    expect_string_count(__wrap_workflow_confirm_scrollable_blocking, body, request.name, -1);
+    expect_value_count(__wrap_workflow_confirm_scrollable_blocking, accept_only, false, -1);
 
     // All A-Okay.
-    will_return(__wrap_workflow_confirm_scrollable, true);
+    will_return(__wrap_workflow_confirm_scrollable_blocking, true);
     will_return(__wrap_memory_set_device_name, true);
     assert_int_equal(COMMANDER_OK, commander_api_set_device_name(&request));
 
     // User rejects.
-    will_return(__wrap_workflow_confirm_scrollable, false);
+    will_return(__wrap_workflow_confirm_scrollable_blocking, false);
     assert_int_equal(COMMANDER_ERR_USER_ABORT, commander_api_set_device_name(&request));
 
     // Setting name fails.
-    will_return(__wrap_workflow_confirm_scrollable, true);
+    will_return(__wrap_workflow_confirm_scrollable_blocking, true);
     will_return(__wrap_memory_set_device_name, false);
     assert_int_equal(COMMANDER_ERR_MEMORY, commander_api_set_device_name(&request));
 }

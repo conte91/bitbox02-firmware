@@ -37,7 +37,7 @@ bool apps_btc_confirm_locktime_rbf(uint32_t locktime, enum apps_btc_rbf_flag rbf
         (unsigned long)locktime,
         rbf_text);
 
-    bool result = workflow_confirm("", formatted_locktime_rbf, NULL, false, false);
+    bool result = workflow_confirm_blocking("", formatted_locktime_rbf, NULL, false, false);
     if (!result) {
         workflow_status_create("Transaction\ncanceled", false);
     }

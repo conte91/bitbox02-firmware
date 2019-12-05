@@ -20,7 +20,7 @@
 #include <test_commander.h>
 #include <ui/ugui/ugui.h>
 
-bool __wrap_workflow_confirm(
+bool __wrap_workflow_confirm_blocking(
     const char* title,
     const char* body,
     UG_FONT* font,
@@ -37,10 +37,10 @@ bool __wrap_workflow_confirm(
 
 static void _test_api_set_mnemonic_passphrase_enabled(void** state)
 {
-    expect_string_count(__wrap_workflow_confirm, body, "Optional\npassphrase", -1);
-    expect_value_count(__wrap_workflow_confirm, font, NULL, -1);
-    expect_value_count(__wrap_workflow_confirm, longtouch, true, -1);
-    expect_value_count(__wrap_workflow_confirm, accept_only, false, -1);
+    expect_string_count(__wrap_workflow_confirm_blocking, body, "Optional\npassphrase", -1);
+    expect_value_count(__wrap_workflow_confirm_blocking, font, NULL, -1);
+    expect_value_count(__wrap_workflow_confirm_blocking, longtouch, true, -1);
+    expect_value_count(__wrap_workflow_confirm_blocking, accept_only, false, -1);
 
     const bool bools[2] = {false, true};
     for (int i = 0; i < 2; i++) {
@@ -50,19 +50,19 @@ static void _test_api_set_mnemonic_passphrase_enabled(void** state)
 
         // All A-Okay.
         expect_string_count(
-            __wrap_workflow_confirm, title, request.enabled ? "Enable" : "Disable", 3);
+            __wrap_workflow_confirm_blocking, title, request.enabled ? "Enable" : "Disable", 3);
 
-        will_return(__wrap_workflow_confirm, true);
+        will_return(__wrap_workflow_confirm_blocking, true);
         expect_value(__wrap_memory_set_mnemonic_passphrase_enabled, enabled, request.enabled);
         will_return(__wrap_memory_set_mnemonic_passphrase_enabled, true);
         assert_int_equal(COMMANDER_OK, commander_api_set_mnemonic_passphrase_enabled(&request));
 
         // User rejects.
-        will_return(__wrap_workflow_confirm, false);
+        will_return(__wrap_workflow_confirm_blocking, false);
         assert_int_equal(
             COMMANDER_ERR_USER_ABORT, commander_api_set_mnemonic_passphrase_enabled(&request));
 
-        will_return(__wrap_workflow_confirm, true);
+        will_return(__wrap_workflow_confirm_blocking, true);
         expect_value(__wrap_memory_set_mnemonic_passphrase_enabled, enabled, request.enabled);
         will_return(__wrap_memory_set_mnemonic_passphrase_enabled, false);
         assert_int_equal(

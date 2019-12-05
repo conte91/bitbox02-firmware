@@ -50,6 +50,13 @@ typedef struct {
      * Positions are measured relative to the screen, not relative to its parent component. */
     void (*const render)(component_t*);
     void (*const on_event)(const event_t*, component_t*);
+    /**
+     * This function will be executed at every cycle of the firmware,
+     * if the component is currently active.
+     *
+     * It will receive self as a parameter.
+     */
+    void (*const spin)(component_t*);
 } component_functions_t;
 
 struct component_t {
@@ -66,6 +73,7 @@ struct component_t {
     struct component_t* parent;
     /* Whether or not to require touch release before emitting touch events. */
     bool emit_without_release;
+    void (*spin)(component_t*);
 };
 
 #endif
