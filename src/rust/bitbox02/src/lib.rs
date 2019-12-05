@@ -99,8 +99,8 @@ pub fn delay(duration: Duration) {
     }
 }
 
-// Safe wrapper for workflow_confirm
-pub fn workflow_confirm(
+// Safe wrapper for workflow_confirm_blocking
+pub fn workflow_confirm_blocking(
     title: &str,
     body: &str,
     font: *const bitbox02_sys::UG_FONT,
@@ -133,7 +133,7 @@ pub fn workflow_confirm(
     };
 
     unsafe {
-        bitbox02_sys::workflow_confirm(&params)
+        bitbox02_sys::workflow_confirm_blocking(&params)
     }
 }
 
