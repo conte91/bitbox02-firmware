@@ -21,15 +21,16 @@
 #include <ui/components/confirm.h>
 #include <ui/screen_stack.h>
 
-static void _dismiss(component_t* component)
+static void _dismiss(void* param)
 {
-    (void)component;
+    (void)param;
     workflow_blocking_unblock();
 }
 
 void workflow_verify_pub(const char* title, const char* pub)
 {
-    ui_screen_stack_push(confirm_create_scrollable(title, pub, NULL, false, _dismiss, NULL));
+    ui_screen_stack_push(
+        confirm_create_scrollable(title, pub, NULL, false, _dismiss, NULL, NULL, NULL));
     bool result = workflow_blocking_block();
     ui_screen_stack_pop();
     if (!result) {

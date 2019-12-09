@@ -34,8 +34,10 @@ component_t* confirm_create(
     const char* body,
     const UG_FONT* font,
     bool longtouch,
-    void (*confirm_callback)(component_t*),
-    void (*cancel_callback)(component_t*));
+    void (*confirm_callback)(void* param),
+    void* confirm_callback_param,
+    void (*cancel_callback)(void* param),
+    void* cancel_callback_param);
 
 /**
  * Creates a confirm screen with a scrollable body.
@@ -51,7 +53,9 @@ component_t* confirm_create_scrollable(
     const char* body,
     const UG_FONT* font,
     bool longtouch,
-    void (*confirm_callback)(component_t*),
-    void (*cancel_callback)(component_t*));
+    void (*confirm_callback)(void* param),
+    void* confirm_callback_param,
+    void (*cancel_callback)(void* param),
+    void* cancel_callback_param);
 
 #endif
