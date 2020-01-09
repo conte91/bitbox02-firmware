@@ -15,6 +15,8 @@
 #include "u2f_keyhandle.h"
 
 #include <keystore.h>
+#include <random.h>
+#include <securechip/securechip.h>
 #include <usb/u2f/u2f.h>
 #include <util.h>
 #include <wally_crypto.h>

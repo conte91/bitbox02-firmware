@@ -54,6 +54,7 @@ set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/workflow/restore.c
   ${CMAKE_SOURCE_DIR}/src/workflow/restore_from_mnemonic.c
   ${CMAKE_SOURCE_DIR}/src/workflow/sdcard.c
+  ${CMAKE_SOURCE_DIR}/src/workflow/select_ctap_credential.c
   ${CMAKE_SOURCE_DIR}/src/workflow/show_mnemonic.c
   ${CMAKE_SOURCE_DIR}/src/workflow/orientation_screen.c
   ${CMAKE_SOURCE_DIR}/src/workflow/status.c
@@ -81,6 +82,7 @@ set(DBB-FIRMWARE-USB-SOURCES
   ${CMAKE_SOURCE_DIR}/src/usb/usb.c
   ${CMAKE_SOURCE_DIR}/src/usb/usb_frame.c
   ${CMAKE_SOURCE_DIR}/src/usb/usb_packet.c
+  ${CMAKE_SOURCE_DIR}/src/usb/u2f/u2f_keys.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_packet.c
 )
 set(DBB-FIRMWARE-USB-SOURCES ${DBB-FIRMWARE-USB-SOURCES} PARENT_SCOPE)
@@ -209,6 +211,12 @@ set(FIRMWARE-DRIVER-SOURCES
 set(FIRMWARE-DRIVER-SOURCES ${FIRMWARE-DRIVER-SOURCES} PARENT_SCOPE)
 
 set(FIRMWARE-U2F-SOURCES
+  ${CMAKE_SOURCE_DIR}/src/fido2/ctap.c
+  ${CMAKE_SOURCE_DIR}/src/fido2/ctap_parse.c
+  ${CMAKE_SOURCE_DIR}/src/fido2/device.c
+  ${CMAKE_SOURCE_DIR}/src/fido2/fido2_keys.c
+  ${CMAKE_SOURCE_DIR}/src/fido2/fido2_u2f.c
+  ${CMAKE_SOURCE_DIR}/src/fido2/extensions.c
   ${CMAKE_SOURCE_DIR}/src/u2f.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_app.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_keyhandle.c
@@ -500,6 +508,20 @@ if(CMAKE_CROSSCOMPILING)
   target_compile_definitions(bootloader-bitboxbase-production.elf PRIVATE BOOTLOADER_PRODUCTION PRODUCT_BITBOX_BASE)
   set_property(TARGET bootloader-bitboxbase-production.elf PROPERTY EXCLUDE_FROM_ALL ON)
 
+  add_library(fido2_crypto
+    ${CMAKE_SOURCE_DIR}/src/fido2/crypto.c
+    )
+  target_link_libraries(fido2_crypto
+      asf4-drivers-min
+      asf4-drivers
+    solo_crypto
+    wallycore
+    )
+  target_include_directories(fido2_crypto PRIVATE ${INCLUDES})
+  target_include_directories(fido2_crypto SYSTEM PRIVATE ${SYSTEMINCLUDES})
+  target_include_directories(fido2_crypto PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+  target_compile_definitions(fido2_crypto PRIVATE PRODUCT_BITBOX_MULTI APP_U2F=1 APP_BTC=1 APP_LTC=1)
+
   set(FIRMWARES
     firmware # Firmware MULTI
     firmware-semihosting # Firmware MULTI with semihosting enabled
@@ -518,7 +540,9 @@ if(CMAKE_CROSSCOMPILING)
       PRIVATE
         cryptoauthlib
         fatfs
+        tinycbor
         base32
+        fido2_crypto
         bignum # TODO: only eth
         sha3   # TODO: Only eth
         ctaes
