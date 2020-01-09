@@ -639,21 +639,23 @@ static void _cmd_msg(const Packet* in_packet, Packet* out_packet, const size_t m
 
 static void _cmd_cbor(const Packet* in_packet, Packet* out_packet, const size_t max_out_len) {
     (void)max_out_len;
-    screen_sprintf_debug(500, "CTAPHID_CBOR");
+    printf("CTAPHID_CBOR");
 
     if (in_packet->len == 0)
     {
-        screen_sprintf_debug(500, "Error,invalid 0 length field for cbor packet\n");
+        printf("Error,invalid 0 length field for cbor packet\n");
         _error_hid(in_packet->cid, U2FHID_ERR_INVALID_LEN, out_packet);
         return;
     }
-    uint8_t status = ctap_request(in_packet->data_addr, in_packet->len, out_packet);
+    uint8_t status = ctap_request(in_packet->data_addr, in_packet->len, out_packet->data_addr + 1, &out_packet->len);
     if (status != CTAP1_ERR_SUCCESS) {
-        screen_sprintf_debug(500, "CBOR error: %d\n", status);
+        printf("CBOR error: %d\n", status);
         _error_hid(in_packet->cid, status, out_packet);
         return;
     }
-    screen_sprintf_debug(500, "CBOR success\n");
+    out_packet->data_addr[0] = status;
+    out_packet->len++;
+    printf("CBOR success\n");
 }
 
 bool u2f_blocking_request_can_go_through(const Packet* in_packet)
