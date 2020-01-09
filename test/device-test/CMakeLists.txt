@@ -102,6 +102,7 @@ target_link_libraries(bitbox02-platform
   PUBLIC
     wallycore
     secp256k1
+    tinycbor
   PRIVATE
     bitbox02_rust_c
     fatfs
@@ -214,6 +215,7 @@ target_link_libraries(bitboxbase-platform
   PUBLIC
     wallycore
     secp256k1
+    tinycbor
   PRIVATE
     asf4-drivers-min
     asf4-drivers

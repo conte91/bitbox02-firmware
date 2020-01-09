@@ -16,10 +16,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <fido2/ctap.h>
+#include <fido2/ctap_errors.h>
 #include <hardfault.h>
 #include <keystore.h>
 #include <memory/memory.h>
 #include <random.h>
+#include <screen.h>
 #include <securechip/securechip.h>
 #include <ui/component.h>
 #include <ui/components/confirm.h>
@@ -47,7 +50,6 @@ typedef struct {
 } USB_APDU;
 
 #define APDU_LEN(A) (uint32_t)(((A).lc1 << 16) + ((A).lc2 << 8) + ((A).lc3))
-#define U2F_TIMEOUT 500 // [msec]
 #define U2F_KEYHANDLE_LEN (U2F_NONCE_LENGTH + SHA256_LEN)
 
 #if (U2F_EC_COORD_SIZE != SHA256_LEN) || (U2F_EC_COORD_SIZE != U2F_NONCE_LENGTH)
@@ -351,7 +353,7 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
 
     memcpy(response->keyHandleCertSig, mac, sizeof(mac));
     memcpy(response->keyHandleCertSig + sizeof(mac), nonce, sizeof(nonce));
-    memcpy(response->keyHandleCertSig + response->keyHandleLen, U2F_ATT_CERT, sizeof(U2F_ATT_CERT));
+    memcpy(response->keyHandleCertSig + response->keyHandleLen, U2F_ATT_CERT, U2F_ATT_CERT_SIZE);
 
     // Add signature using attestation key
     sig_base.reserved = 0;
@@ -368,9 +370,9 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
         return;
     }
 
-    uint8_t* resp_sig = response->keyHandleCertSig + response->keyHandleLen + sizeof(U2F_ATT_CERT);
+    uint8_t* resp_sig = response->keyHandleCertSig + response->keyHandleLen + U2F_ATT_CERT_SIZE;
     int der_len = _sig_to_der(sig, resp_sig);
-    size_t kh_cert_sig_len = response->keyHandleLen + sizeof(U2F_ATT_CERT) + der_len;
+    size_t kh_cert_sig_len = response->keyHandleLen + U2F_ATT_CERT_SIZE + der_len;
 
     // Append success bytes
     memcpy(response->keyHandleCertSig + kh_cert_sig_len, "\x90\x00", 2);
@@ -521,6 +523,16 @@ static void _cmd_wink(const Packet* in_packet)
     usb_processing_send_packet(usb_processing_u2f(), &out_packet);
 }
 
+static void _cmd_cancel(const Packet* in_packet)
+{
+    (void)in_packet;
+    //screen_print_debug("CANCEL", 500);
+    /*
+     * U2FHID_CANCEL messages should abort the current transaction,
+     * but no response should be given.
+     */
+}
+
 /**
  * Synchronize a channel and optionally requests a unique 32-bit channel identifier (CID)
  * that can be used by the requesting application during its lifetime.
@@ -614,6 +626,31 @@ static void _cmd_msg(const Packet* in_packet)
     }
 }
 
+static void _cmd_cbor(const Packet* in_packet) {
+    Packet out_packet;
+    prepare_usb_packet(in_packet->cmd, in_packet->cid, &out_packet);
+
+    if (in_packet->len == 0)
+    {
+        printf("Error,invalid 0 length field for cbor packet\n");
+        _error_hid(in_packet->cid, U2FHID_ERR_INVALID_LEN, &out_packet);
+        usb_processing_send_packet(usb_processing_u2f(), &out_packet);
+        return;
+    }
+    ctap_request_result_t result = ctap_request(in_packet->data_addr, in_packet->len, out_packet.data_addr + 1, &out_packet.len);
+    if (!result.request_completed) {
+        /* Don't send a response yet. */
+        return;
+    }
+    if (result.status != CTAP1_ERR_SUCCESS) {
+        _error_hid(in_packet->cid, result.status, &out_packet);
+    } else {
+        out_packet.data_addr[0] = result.status;
+        out_packet.len++;
+    }
+    usb_processing_send_packet(usb_processing_u2f(), &out_packet);
+}
+
 bool u2f_blocking_request_can_go_through(const Packet* in_packet)
 {
     if (!_state.locked) {
@@ -657,6 +694,8 @@ void u2f_device_setup(void)
         {U2FHID_WINK, _cmd_wink},
         {U2FHID_INIT, _cmd_init},
         {U2FHID_MSG, _cmd_msg},
+        {U2FHID_CBOR, _cmd_cbor},
+        {U2FHID_CANCEL, _cmd_cancel},
     };
     usb_processing_register_cmds(
         usb_processing_u2f(), u2f_cmd_callbacks, sizeof(u2f_cmd_callbacks) / sizeof(CMD_Callback));
