@@ -143,6 +143,116 @@ set_property(TARGET secp256k1
 set_target_properties(secp256k1 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/libwally-core/src/secp256k1/include)
 set_target_properties(secp256k1 PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/libwally-core/src/secp256k1/include)
 
+add_library(tinycbor STATIC
+	tinycbor/src/cborerrorstrings.c
+	tinycbor/src/cborencoder.c
+	tinycbor/src/cborencoder_close_container_checked.c
+	tinycbor/src/cborparser.c
+	tinycbor/src/cborpretty.c
+)
+set_target_properties(tinycbor PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/tinycbor/src)
+set_target_properties(tinycbor PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/tinycbor/src)
+
+#target_include_directories(solo SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/solo/tinycbor/src)
+#set_target_properties(solo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/solo/)
+#set_target_properties(solo PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/solo/)
+#
+#add_library(solo STATIC solo/fido2/ctap.c)
+#target_include_directories(solo SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/solo/tinycbor/src)
+#set_target_properties(solo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/solo/)
+#set_target_properties(solo PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/solo/)
+#
+add_library(solo_crypto STATIC
+    solo/crypto/cifra/src/aes.c
+    solo/crypto/cifra/src/sha256.c
+    solo/crypto/cifra/src/sha512.c
+    solo/crypto/cifra/src/chash.c
+    solo/crypto/cifra/src/hmac.c
+    solo/crypto/cifra/src/pbkdf2.c
+    solo/crypto/cifra/src/modes.c
+    solo/crypto/cifra/src/eax.c
+    solo/crypto/cifra/src/gf128.c
+    solo/crypto/cifra/src/blockwise.c
+    solo/crypto/cifra/src/cmac.c
+    solo/crypto/cifra/src/salsa20.c
+    solo/crypto/cifra/src/chacha20.c
+    #solo/crypto/cifra/src/curve25519.c
+    solo/crypto/cifra/src/gcm.c
+    solo/crypto/cifra/src/cbcmac.c
+    solo/crypto/cifra/src/ccm.c
+    solo/crypto/cifra/src/sha3.c
+    solo/crypto/cifra/src/sha1.c
+    solo/crypto/cifra/src/poly1305.c
+    solo/crypto/cifra/src/norx.c
+    solo/crypto/cifra/src/chacha20poly1305.c
+    solo/crypto/cifra/src/drbg.c
+    #solo/crypto/cifra/src/ocb.c
+    #solo/crypto/cifra/extra_vecs/openssl-hash.c
+    #solo/crypto/cifra/src/hmac.c
+    #solo/crypto/cifra/src/curve25519.tweetnacl.c
+    #solo/crypto/cifra/src/ocb.c
+    #solo/crypto/cifra/src/norx.c
+    #solo/crypto/cifra/src/testchacha20poly1305.c
+    #solo/crypto/cifra/src/chacha20.c
+    #solo/crypto/cifra/src/testnorx.c
+    #solo/crypto/cifra/src/drbg.c
+    #solo/crypto/cifra/src/testcurve25519.c
+    #solo/crypto/cifra/src/pbkdf2.c
+    #solo/crypto/cifra/src/poly1305.c
+    #solo/crypto/cifra/src/sha256.c
+    #solo/crypto/cifra/src/arm/unacl/scalarmult.c
+    #solo/crypto/cifra/src/arm/main.c
+    #solo/crypto/cifra/src/arm/semihost.c
+    #solo/crypto/cifra/src/arm/boot.c
+    #solo/crypto/cifra/src/aes.c
+    #solo/crypto/cifra/src/modes.c
+    #solo/crypto/cifra/src/blockwise.c
+    #solo/crypto/cifra/src/curve25519.naclref.c
+    #solo/crypto/cifra/src/testdrbg.c
+    #solo/crypto/cifra/src/testsha2.c
+    #solo/crypto/cifra/src/salsa20.c
+    #solo/crypto/cifra/src/testaes.c
+    #solo/crypto/cifra/src/curve25519.c
+    #solo/crypto/cifra/src/cbcmac.c
+    #solo/crypto/cifra/src/cmac.c
+    #solo/crypto/cifra/src/testpoly1305.c
+    #solo/crypto/cifra/src/ccm.c
+    #solo/crypto/cifra/src/chash.c
+    #solo/crypto/cifra/src/eax.c
+    #solo/crypto/cifra/src/sha1.c
+    #solo/crypto/cifra/src/testsalsa20.c
+    #solo/crypto/cifra/src/sha512.c
+    #solo/crypto/cifra/src/curve25519.donna.c
+    #solo/crypto/cifra/src/gf128.c
+    #solo/crypto/cifra/src/sha3.c
+    #solo/crypto/cifra/src/testmodes.c
+    #solo/crypto/cifra/src/testsha1.c
+    #solo/crypto/cifra/src/gcm.c
+    #solo/crypto/cifra/src/testsha3.c
+    #solo/crypto/cifra/src/chacha20poly1305.c
+    #solo/crypto/aes-gcm/aes_gcm.c
+    solo/crypto/sha256/sha256.c
+    #solo/crypto/micro-ecc/test/test_ecdsa.c
+    #solo/crypto/micro-ecc/test/test_compress.c
+    #solo/crypto/micro-ecc/test/test_compute.c
+    #solo/crypto/micro-ecc/test/test_ecdh.c
+    solo/crypto/micro-ecc/uECC.c
+    solo/crypto/tiny-AES-c/aes.c
+    #solo/crypto/tiny-AES-c/test.c
+    )
+set(LIBSOLO_CRYPTO_INCLUDES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tinycbor/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/solo/
+    ${CMAKE_CURRENT_SOURCE_DIR}/solo/crypto/sha256
+    ${CMAKE_CURRENT_SOURCE_DIR}/solo/crypto/micro-ecc
+    #${CMAKE_CURRENT_SOURCE_DIR}/solo/crypto/cifra/src/
+    #${CMAKE_CURRENT_SOURCE_DIR}/solo/crypto/cifra/src/ext
+    )
+
+target_include_directories(solo_crypto PUBLIC ${LIBSOLO_CRYPTO_INCLUDES})
+#set_target_properties(solo_crypto PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${LIBSOLO_CRYPTO_INCLUDES})
+#set_target_properties(solo_crypto PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${LIBSOLO_CRYPTO_INCLUDES})
+set_target_properties(solo_crypto PROPERTIES COMPILE_FLAGS "-std=gnu99")
 
 if(CMAKE_CROSSCOMPILING)
   # Cortex Microcontroller Software Interface Standard
@@ -284,6 +394,8 @@ if(CMAKE_CROSSCOMPILING)
   target_compile_definitions(cryptoauthlib PUBLIC ATCA_HAL_CUSTOM ATCA_NO_POLL)
   target_include_directories(cryptoauthlib SYSTEM PUBLIC cryptoauthlib/lib)
   target_compile_options(cryptoauthlib PRIVATE -Wno-pedantic -Wno-incompatible-pointer-types -Wno-unused-parameter -Wno-unused-variable)
+
+  target_compile_definitions(solo_crypto PUBLIC CORTEX_M4)
 
   add_library(fatfs
     FatFs/source/ff.c

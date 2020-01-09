@@ -17,10 +17,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <fido2/ctap.h>
+#include <fido2/ctap_errors.h>
 #include <hardfault.h>
 #include <keystore.h>
 #include <memory/memory.h>
 #include <random.h>
+#include <screen.h>
 #include <securechip/securechip.h>
 #include <ui/component.h>
 #include <ui/components/confirm.h>
@@ -587,7 +590,7 @@ static void _cmd_init(const Packet* in_packet, Packet* out_packet, const size_t 
     response.versionMajor = DIGITAL_BITBOX_VERSION_MAJOR;
     response.versionMinor = DIGITAL_BITBOX_VERSION_MINOR;
     response.versionBuild = DIGITAL_BITBOX_VERSION_PATCH;
-    response.capFlags = U2FHID_CAPFLAG_WINK;
+    response.capFlags = U2FHID_CAPFLAG_WINK | U2FHID_CAPFLAG_CBOR;
     util_zero(out_packet->data_addr, sizeof(out_packet->data_addr));
     memcpy(out_packet->data_addr, &response, sizeof(response));
 }
@@ -634,6 +637,25 @@ static void _cmd_msg(const Packet* in_packet, Packet* out_packet, const size_t m
     }
 }
 
+static void _cmd_cbor(const Packet* in_packet, Packet* out_packet, const size_t max_out_len) {
+    (void)max_out_len;
+    screen_sprintf_debug(500, "CTAPHID_CBOR");
+
+    if (in_packet->len == 0)
+    {
+        screen_sprintf_debug(500, "Error,invalid 0 length field for cbor packet\n");
+        _error_hid(in_packet->cid, U2FHID_ERR_INVALID_LEN, out_packet);
+        return;
+    }
+    uint8_t status = ctap_request(in_packet->data_addr, in_packet->len, out_packet);
+    if (status != CTAP1_ERR_SUCCESS) {
+        screen_sprintf_debug(500, "CBOR error: %d\n", status);
+        _error_hid(in_packet->cid, status, out_packet);
+        return;
+    }
+    screen_sprintf_debug(500, "CBOR success\n");
+}
+
 bool u2f_blocking_request_can_go_through(const Packet* in_packet)
 {
     if (!_state.locked) {
@@ -671,6 +693,7 @@ void u2f_device_setup(void)
         {U2FHID_WINK, _cmd_wink},
         {U2FHID_INIT, _cmd_init},
         {U2FHID_MSG, _cmd_msg},
+        {U2FHID_CBOR, _cmd_cbor},
     };
     usb_processing_register_cmds(
         usb_processing_u2f(), u2f_cmd_callbacks, sizeof(u2f_cmd_callbacks) / sizeof(CMD_Callback));
