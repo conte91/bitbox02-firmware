@@ -1644,26 +1644,6 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
     printf1(TAG_DUMP,"cbor req: "); dump_hex1(TAG_DUMP, pkt_raw, length);
 
     printf1(TAG_DUMP,"cbor cmd: %d\n", cmd);
-    printf1(TAG_DUMP,"cbor cmd: %d\n", cmd);
-    printf1(TAG_DUMP,"cbor cmd: %d\n", cmd);
-    switch(cmd)
-    {
-        case CTAP_MAKE_CREDENTIAL:
-        case CTAP_GET_ASSERTION:
-            if (ctap_device_locked())
-            {
-                status = CTAP2_ERR_PIN_BLOCKED;
-                goto done;
-            }
-            if (ctap_device_boot_locked())
-            {
-                status = CTAP2_ERR_PIN_AUTH_BLOCKED;
-                goto done;
-            }
-            break;
-        default:
-            break;
-    }
 
     switch(cmd)
     {
@@ -1738,7 +1718,6 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
             printf2(TAG_ERR,"error, invalid cmd: 0x%02x\n", cmd);
     }
 
-done:
     device_set_status(CTAPHID_STATUS_IDLE);
     getAssertionState.lastcmd = cmd;
 

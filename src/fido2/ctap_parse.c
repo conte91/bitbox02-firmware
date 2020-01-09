@@ -878,6 +878,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
         check_ret(ret);
     }
 
+    printf("Success :)\n");
     return 0;
 }
 
