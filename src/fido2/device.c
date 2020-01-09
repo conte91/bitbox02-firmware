@@ -16,17 +16,18 @@ void device_read_aaguid(uint8_t * dst) {
 }
 
 int ctap_generate_rng(uint8_t* dst, size_t num) {
-    /* Generate bytes in chunks of 4 into the destination buffer. */
-    for (size_t i = 0; i < num; i += 4) {
-        random_32_bytes(dst + i);
+    /* Generate bytes in chunks of 32 bytes into the destination buffer. */
+    size_t n_32bytes_chunks = num / 32;
+    for (size_t i = 0; i < n_32bytes_chunks; ++i) {
+        random_32_bytes(dst + i * 32);
     }
     /* Generate the last N bytes as needed. */
-    int bytes_missing = num % 4;
+    int bytes_missing = num % 32;
     if (bytes_missing) {
         int final_word_offset = num - bytes_missing;
-        uint32_t last_bytes;
-        random_32_bytes((uint8_t*)&last_bytes);
-        memcpy(dst + final_word_offset, &last_bytes, bytes_missing);
+        uint8_t last_bytes[32];
+        random_32_bytes(last_bytes);
+        memcpy(dst + final_word_offset, last_bytes, bytes_missing);
     }
     return 1;
 }
