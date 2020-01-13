@@ -2,6 +2,23 @@
 #define __CTAP_LOGGING_H
 
 #if defined(SEMIHOSTING)
+
+inline void dump_hex(const uint8_t* buf, int size)
+{
+    while(size--)
+    {
+        printf("%02x ", *buf++);
+    }
+    printf("\n");
+}
+
+inline void ctap_dump_hex1(const char* tag, const uint8_t* data, int length)
+{
+    printf("%s: ",  tag);
+    dump_hex(data,length);
+    printf("\n");
+}
+
 void ctap_dump_hex1(const char* tag, const uint8_t* data, int length);
 
 #define dump_hex1(tag, data, length) \

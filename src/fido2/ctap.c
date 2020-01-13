@@ -40,32 +40,6 @@ static void ctap_reset_key_agreement(void);
 
 struct _getAssertionState getAssertionState;
 
-//#ifdef PIN_SUPPORTED
-static uint8_t verify_pin_auth(uint8_t * pinAuth, uint8_t * clientDataHash)
-{
-    uint8_t hmac[32];
-
-    crypto_sha256_hmac_init(PIN_TOKEN, PIN_TOKEN_SIZE, hmac);
-    crypto_sha256_update(clientDataHash, CLIENT_DATA_HASH_SIZE);
-    crypto_sha256_hmac_final(PIN_TOKEN, PIN_TOKEN_SIZE, hmac);
-
-    if (memcmp(pinAuth, hmac, 16) == 0)
-    {
-        return 0;
-    }
-    else
-    {
-        printf2(TAG_ERR,"Pin auth failed\n");
-        //dump_hex1(TAG_ERR,pinAuth,16);
-        //dump_hex1(TAG_ERR,hmac,16);
-        return CTAP2_ERR_PIN_AUTH_INVALID;
-    }
-
-}
-//#endif
-
-
-
 static uint8_t ctap_get_info(CborEncoder * encoder)
 {
     int ret;
@@ -739,7 +713,9 @@ static uint8_t ctap_add_attest_statement(CborEncoder * map, uint8_t * sigder, in
     return 0;
 }
 
-// Return 1 if credential belongs to this token
+/**
+ * Return 1 if credential belongs to this token
+ */
 static int ctap_authenticate_credential(struct rpId * rp, CTAP_credentialDescriptor * desc)
 {
     uint8_t rpIdHash[32];
@@ -777,8 +753,7 @@ static int ctap_authenticate_credential(struct rpId * rp, CTAP_credentialDescrip
     return 0;
 }
 
-static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length)
-{
+static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
     CTAP_makeCredential MC;
     int ret;
     unsigned int i;
@@ -789,48 +764,43 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 
     ret = ctap_parse_make_credential(&MC,encoder, request, length);
 
-    if (ret != 0)
-    {
+    if (ret != 0) {
         printf2(TAG_ERR,"error, parse_make_credential failed\n");
         return ret;
     }
-    if (MC.pinAuthEmpty)
-    {
-        /* pinAuth was present and was an empty string. */
-        check_retr( ctap2_user_presence_test("FIDO2 pin", "Pin auth") );
-        return ctap_is_pin_set() == 1 ? CTAP2_ERR_PIN_AUTH_INVALID : CTAP2_ERR_PIN_NOT_SET;
+    if (MC.pinAuthEmpty) {
+        /*
+         * pinAuth was present and was an empty string.
+         * The client is asking us if we support pin
+         * (and asks to check for user presence before we move on).
+         */
+        check_retr(ctap2_user_presence_test("FIDO2 pin", "Pin auth"));
+        /* We don't support PIN semantics. */
+        return CTAP2_ERR_PIN_NOT_SET;
     }
-    if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask)
-    {
+    if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask) {
         printf2(TAG_ERR,"error, required parameter(s) for makeCredential are missing\n");
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
-    if (ctap_is_pin_set() == 1 && MC.pinAuthPresent == 0)
-    {
-        printf2(TAG_ERR,"pinAuth is required\n");
-        return CTAP2_ERR_PIN_REQUIRED;
-    }
-    else
-    {
-        if (ctap_is_pin_set() || (MC.pinAuthPresent))
-        {
-            ret = verify_pin_auth(MC.pinAuth, MC.clientDataHash);
-            check_retr(ret);
-        }
+    if (MC.pinAuthPresent) {
+        /* We don't support pinAuth. */
+        return CTAP2_ERR_PIN_AUTH_INVALID;
     }
 
-    if (MC.up == 1 || MC.up == 0)
-    {
+    if (MC.up == 1 || MC.up == 0) {
+        /*
+         * The UP flag can't be set for authenticatorMakeCredential.
+         * It must always be unset (0xFF).
+         */
         return CTAP2_ERR_INVALID_OPTION;
     }
 
     // crypto_aes256_init(CRYPTO_TRANSPORT_KEY, NULL);
-    for (i = 0; i < MC.excludeListSize; i++)
-    {
+    for (i = 0; i < MC.excludeListSize; i++) {
         ret = parse_credential_descriptor(&MC.excludeList, excl_cred);
-        if (ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE)
-        {
+        if (ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
+            /* Skip credentials that fail to parse. */
             continue;
         }
         check_retr(ret);
@@ -1019,8 +989,11 @@ static void add_existing_user_info(CTAP_credentialDescriptor * cred)
     printf1(TAG_GREEN, "NO rk match for allowList item \r\n");
 }
 
-// @return the number of valid credentials
-// sorts the credentials.  Most recent creds will be first, invalid ones last.
+/**
+ * Sorts the credentials.  Most recent creds will be first, invalid ones last.
+ *
+ * @return the number of valid credentials
+ */
 static int ctap_filter_invalid_credentials(CTAP_getAssertion * GA)
 {
     int i;
@@ -1030,7 +1003,7 @@ static int ctap_filter_invalid_credentials(CTAP_getAssertion * GA)
 
     for (i = 0; i < GA->credLen; i++)
     {
-        if (! ctap_authenticate_credential(&GA->rp, &GA->creds[i]))
+        if (!ctap_authenticate_credential(&GA->rp, &GA->creds[i]))
         {
             printf1(TAG_GA, "CRED #%"PRIu32" is invalid\n", GA->creds[i].credential.id.count);
 #ifdef ENABLE_U2F_EXTENSIONS
@@ -1222,30 +1195,22 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     CTAP_authDataHeader* auth_data_header = (CTAP_authDataHeader*)auth_data_buf;
     int ret = ctap_parse_get_assertion(&GA,request,length);
 
-    if (ret != 0)
-    {
+    if (ret != 0) {
         printf2(TAG_ERR,"error, parse_get_assertion failed\n");
         return ret;
     }
 
-    if (GA.pinAuthEmpty)
-    {
-        check_retr( ctap2_user_presence_test("FIDO2", "pinAuthEmpty") );
-        return ctap_is_pin_set() == 1 ? CTAP2_ERR_PIN_AUTH_INVALID : CTAP2_ERR_PIN_NOT_SET;
+    if (GA.pinAuthEmpty) {
+        check_retr(ctap2_user_presence_test("FIDO2", "pinAuthEmpty"));
+        return CTAP2_ERR_PIN_NOT_SET;
     }
-    if (GA.pinAuthPresent)
-    {
-        ret = verify_pin_auth(GA.pinAuth, GA.clientDataHash);
-        check_retr(ret);
-        getAssertionState.user_verified = 1;
-    }
-    else
-    {
-        getAssertionState.user_verified = 0;
+    if (GA.pinAuthPresent) {
+        /* We don't support pinAuth. */
+        return CTAP2_ERR_PIN_AUTH_INVALID;
     }
 
-    if (!GA.rp.size || !GA.clientDataHashPresent)
-    {
+    if (!GA.rp.size || !GA.clientDataHashPresent) {
+        /* Both parameters are mandatory. */
         return CTAP2_ERR_MISSING_PARAMETER;
     }
     CborEncoder map;
@@ -2096,20 +2061,3 @@ void lock_device_permanently(void) {
     authenticator_write_state(&STATE);
 }
 
-#if defined(SEMIHOSTING)
-static void dump_hex(const uint8_t* buf, int size)
-{
-    while(size--)
-    {
-        printf("%02x ", *buf++);
-    }
-    printf("\n");
-}
-
-void ctap_dump_hex1(const char* tag, const uint8_t* data, int length)
-{
-    printf("%s: ",  tag);
-    dump_hex(data,length);
-    printf("\n");
-}
-#endif
