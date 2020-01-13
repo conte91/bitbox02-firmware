@@ -1,6 +1,8 @@
 #include "device.h"
 
 #include <random.h>
+#include <screen.h>
+#include <workflow/confirm.h>
 
 /*
  * Get the AAGUID (identifier of the type of device authenticating).
@@ -62,13 +64,20 @@ void device_set_status(uint32_t status)
 }
 bool _up_disabled = false;
 
-int ctap_user_presence_test(uint32_t delay) {
-    (void)delay;
+int ctap_user_presence_test(const char* title, const char* prompt, uint32_t delay_ms) {
     if (_up_disabled)
     {
         return 2;
     }
-    return 1;
+    bool result = workflow_confirm_with_timeout(
+                                                title, prompt, NULL, false,
+                                                /*
+                                                 * We don't have realtime measures,
+                                                 * just use a heuristic to convert ms -> #ticks
+                                                 */
+                                                delay_ms * 4.7
+                                                );
+    return result ? 1 : 0;
 }
 
 #define RK_NUM  50
@@ -104,7 +113,7 @@ void ctap_overwrite_rk(int index, CTAP_residentKey * rk)
     }
 }
 
-__attribute__((weak)) void ctap_store_rk(int index, CTAP_residentKey * rk)
+void ctap_store_rk(int index, CTAP_residentKey * rk)
 {
     if (index < RK_NUM)
     {
