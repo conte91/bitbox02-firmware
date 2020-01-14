@@ -30,7 +30,6 @@ uint8_t parse_rp_id(struct rpId * rp, CborValue * val);
 uint8_t parse_rp(struct rpId * rp, CborValue * val);
 uint8_t parse_options(CborValue * val, uint8_t * rk, uint8_t * uv, uint8_t * up);
 
-uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it);
 uint8_t parse_cose_key(CborValue * it, COSE_key * cose);
 
 

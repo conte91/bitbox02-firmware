@@ -960,7 +960,10 @@ uint8_t parse_credential_descriptor(CborValue * arr, CTAP_credentialDescriptor *
     return 0;
 }
 
-uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it)
+/**
+ * Parses the list of allowed credentials into GA->creds.
+ */
+static uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it)
 {
     CborValue arr;
     size_t len;
@@ -982,10 +985,8 @@ uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it)
 
     GA->credLen = 0;
 
-    for(i = 0; i < len; i++)
-    {
-        if (i >= ALLOW_LIST_MAX_SIZE)
-        {
+    for (i = 0; i < len; i++) {
+        if (i >= ALLOW_LIST_MAX_SIZE) {
             printf1(TAG_PARSE,"Error, out of memory for allow list.\n");
             return CTAP2_ERR_TOO_MANY_ELEMENTS;
         }

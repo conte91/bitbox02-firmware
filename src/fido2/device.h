@@ -216,4 +216,9 @@ uint16_t device_attestation_cert_der_get_size(void);
  * */
 void device_read_aaguid(uint8_t * dst);
 
+/**
+ * @return whether the device has been configured
+ *         properly and can verify the user.
+ */
+bool device_is_uv_initialized(void);
 #endif

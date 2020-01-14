@@ -187,3 +187,9 @@ uint8_t * device_get_attestation_key(void){
         "\xb7\x2e\x5f\xe7\x5d\x30";
     return attestation_key;
 }
+
+bool device_is_uv_initialized(void)
+{
+    /* TODO */
+    return true;
+}
