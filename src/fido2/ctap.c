@@ -549,19 +549,20 @@ static int ctap_make_auth_data(struct rpId * rp, CborEncoder * map, uint8_t * au
         memmove(&rk.id, &authData->attest.id, sizeof(CredentialId));
         memmove(&rk.user, &credInfo->user, sizeof(CTAP_userEntity));
 
-        for (uint16_t i = 0; i < STATE.rk_stored; i++) {
+        uint16_t n_stored_creds = STATE.rk_stored;
+        for (uint16_t i = 0; i < n_stored_creds; i++) {
             ctap_load_rk(i, &rk2);
             if (is_matching_rk(&rk, &rk2)) {
                 ctap_overwrite_rk(i, &rk);
                 goto done_rk;
             }
         }
-        if (index >= ctap_rk_size()) {
+        if (n_stored_creds >= ctap_rk_size()) {
             printf2(TAG_ERR, "Out of memory for resident keys\r\n");
             return CTAP2_ERR_KEY_STORE_FULL;
         }
         ctap_increment_rk_store();
-        ctap_store_rk(index, &rk);
+        ctap_store_rk(n_stored_creds, &rk);
     }
  done_rk:
 
