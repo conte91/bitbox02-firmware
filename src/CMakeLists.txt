@@ -214,6 +214,7 @@ set(FIRMWARE-U2F-SOURCES
   ${CMAKE_SOURCE_DIR}/src/fido2/extensions.c
   ${CMAKE_SOURCE_DIR}/src/u2f.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_app.c
+  ${CMAKE_SOURCE_DIR}/src/u2f/u2f_keyhandle.c
 )
 set(FIRMWARE-U2F-SOURCES ${FIRMWARE-U2F-SOURCES} PARENT_SCOPE)
 
