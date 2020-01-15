@@ -977,16 +977,7 @@ static int ctap_filter_invalid_credentials(CTAP_getAssertion * GA)
     for (int i = 0; i < GA->credLen; i++) {
         if (!ctap_authenticate_credential(&GA->rp, &GA->creds[i])) {
             printf1(TAG_GA, "CRED #%"PRIu32" is invalid\n", GA->creds[i].credential.id.count);
-#ifdef ENABLE_U2F_EXTENSIONS
-            if (is_extension_request((uint8_t*)&GA->creds[i].credential.id, sizeof(CredentialId))) {
-                printf1(TAG_EXT, "CRED #%d is extension\n", GA->creds[i].credential.id.count);
-                count++;
-            }
-            else
-#endif
-            {
-                GA->creds[i].credential.id.count = 0;      // invalidate
-            }
+            GA->creds[i].credential.id.count = 0;      // invalidate
         }
         else
         {
@@ -1100,16 +1091,7 @@ static uint8_t ctap_end_get_assertion(CborEncoder * map, CTAP_credentialDescript
     unsigned int cred_size = get_credential_id_size(cred);
     crypto_ecc256_load_key((uint8_t*)&cred->credential.id, cred_size, NULL, 0);
 
-#ifdef ENABLE_U2F_EXTENSIONS
-    if ( extend_fido2(&cred->credential.id, sigder) )
-    {
-        sigder_sz = 72;
-    }
-    else
-#endif
-    {
-        sigder_sz = ctap_calculate_signature(auth_data_buf, auth_data_buf_sz, clientDataHash, auth_data_buf, sigbuf, sigder);
-    }
+    sigder_sz = ctap_calculate_signature(auth_data_buf, auth_data_buf_sz, clientDataHash, auth_data_buf, sigbuf, sigder);
 
     {
         ret = cbor_encode_int(map, RESP_signature);  // 3
@@ -1250,41 +1232,25 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
 
     uint32_t auth_data_buf_sz = sizeof(CTAP_authDataHeader);
 
-#ifdef ENABLE_U2F_EXTENSIONS
-    if ( is_extension_request((uint8_t*)&GA.creds[validCredCount - 1].credential.id, sizeof(CredentialId)) )
-    {
+    device_disable_up(GA.up == 0);
+    ret = ctap_authenticate_auth_data(&GA.rp, &map, auth_data_buf);
+    device_disable_up(false);
+    check_retr(ret);
 
-        crypto_sha256_init();
-        crypto_sha256_update(GA.rp.id, GA.rp.size);
-        crypto_sha256_final(auth_data_header->rpIdHash);
+    auth_data_header->flags &= ~(1 << 2);
+    auth_data_header->flags |= (getAssertionState.user_verified << 2);
 
-        auth_data_header->flags = (1 << 0);
-        auth_data_header->flags |= (1 << 2);
-    }
-    else
-#endif
     {
-        device_disable_up(GA.up == 0);
-        ret = ctap_authenticate_auth_data(&GA.rp, &map, auth_data_buf);
-        device_disable_up(false);
+        unsigned int ext_encoder_buf_size = sizeof(auth_data_buf) - auth_data_buf_sz;
+        uint8_t * ext_encoder_buf = auth_data_buf + auth_data_buf_sz;
+
+        ret = ctap_make_extensions(&GA.extensions, ext_encoder_buf, &ext_encoder_buf_size);
         check_retr(ret);
-
-        auth_data_header->flags &= ~(1 << 2);
-        auth_data_header->flags |= (getAssertionState.user_verified << 2);
-
+        if (ext_encoder_buf_size)
         {
-            unsigned int ext_encoder_buf_size = sizeof(auth_data_buf) - auth_data_buf_sz;
-            uint8_t * ext_encoder_buf = auth_data_buf + auth_data_buf_sz;
-
-            ret = ctap_make_extensions(&GA.extensions, ext_encoder_buf, &ext_encoder_buf_size);
-            check_retr(ret);
-            if (ext_encoder_buf_size)
-            {
-                ((CTAP_authDataHeader *)auth_data_buf)->flags |= (1 << 7);
-                auth_data_buf_sz += ext_encoder_buf_size;
-            }
+            ((CTAP_authDataHeader *)auth_data_buf)->flags |= (1 << 7);
+            auth_data_buf_sz += ext_encoder_buf_size;
         }
-
     }
 
     save_credential_list((CTAP_authDataHeader*)auth_data_buf, GA.clientDataHash, GA.creds, validCredCount-1);   // skip last one

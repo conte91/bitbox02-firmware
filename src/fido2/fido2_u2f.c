@@ -10,14 +10,7 @@
 #include "ctaphid.h"
 #include "crypto.h"
 #include "device.h"
-//#include "apdu.h"
-//#include "wallet.h"
-#ifdef ENABLE_U2F_EXTENSIONS
-#include "extensions.h"
-#endif
-//#include APP_CONFIG
 
-// void u2f_response_writeback(uint8_t * buf, uint8_t len);
 #ifdef ENABLE_U2F
 static int16_t u2f_register(struct u2f_register_request * req);
 static int16_t u2f_authenticate(struct u2f_authenticate_request * req, uint8_t control);
@@ -40,9 +33,6 @@ void u2f_request_ex(APDU_HEADER *req, uint8_t *payload, uint32_t len, CTAP_RESPO
         rcode = U2F_SW_CLASS_NOT_SUPPORTED;
         goto end;
     }
-#ifdef ENABLE_U2F_EXTENSIONS
-    rcode = extend_u2f(req, payload, len);
-#endif
     if (rcode != U2F_SW_NO_ERROR && rcode != U2F_SW_CONDITIONS_NOT_SATISFIED)       // If the extension didn't do anything...
     {
 #ifdef ENABLE_U2F
