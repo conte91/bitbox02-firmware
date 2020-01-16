@@ -50,7 +50,7 @@ typedef struct {
 #define U2F_TIMEOUT 500 // [msec]
 #define U2F_KEYHANDLE_LEN (U2F_NONCE_LENGTH + SHA256_LEN)
 
-#if (U2F_EC_KEY_SIZE != SHA256_LEN) || (U2F_EC_KEY_SIZE != U2F_NONCE_LENGTH)
+#if (U2F_EC_COORD_SIZE != SHA256_LEN) || (U2F_EC_COORD_SIZE != U2F_NONCE_LENGTH)
 #error "Incorrect macro values for u2f"
 #endif
 
@@ -279,7 +279,7 @@ static int _sig_to_der(const uint8_t* sig, uint8_t* der)
  */
 static void _register(const USB_APDU* apdu, Packet* out_packet)
 {
-    uint8_t privkey[U2F_EC_KEY_SIZE] = {0};
+    uint8_t privkey[U2F_EC_COORD_SIZE] = {0};
     uint8_t nonce[U2F_NONCE_LENGTH] = {0};
     uint8_t mac[HMAC_SHA256_LEN] = {0};
     uint8_t data[sizeof(U2F_REGISTER_RESP) + 2] = {0};
@@ -378,7 +378,7 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
 
 static void _authenticate(const USB_APDU* apdu, Packet* out_packet)
 {
-    uint8_t privkey[U2F_EC_KEY_SIZE];
+    uint8_t privkey[U2F_EC_COORD_SIZE];
     uint8_t sig[64] = {0};
     U2F_AUTHENTICATE_SIG_STR sig_base;
 
