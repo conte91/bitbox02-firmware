@@ -13,11 +13,13 @@
 #define _FIDO2_U2F_H_
 
 #include <stdint.h>
+
+#include <usb/u2f/u2f.h>
+
 #include "ctap.h"
 
 #define U2F_EC_FMT_UNCOMPRESSED             0x04
 
-#define U2F_EC_POINT_SIZE                   32
 #define U2F_EC_PUBKEY_SIZE                  65
 #define U2F_APDU_SIZE                       7
 #define U2F_CHALLENGE_SIZE                  32
@@ -73,8 +75,8 @@ struct u2f_request_apdu
 struct u2f_ec_point
 {
     uint8_t fmt;
-    uint8_t x[U2F_EC_POINT_SIZE];
-    uint8_t y[U2F_EC_POINT_SIZE];
+    uint8_t x[U2F_EC_COORD_SIZE];
+    uint8_t y[U2F_EC_COORD_SIZE];
 };
 
 struct u2f_register_request
