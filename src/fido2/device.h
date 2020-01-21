@@ -138,7 +138,7 @@ uint32_t ctap_rk_size(void);
  * 
  * *Optional*, if not implemented, operates on non-persistant RK's.
 */
-void ctap_store_rk(int index,CTAP_residentKey * rk);
+void ctap_store_rk(int index, ctap_resident_key_t* rk);
 
 /** Read a resident key from an index into memory
  * @param index to read resident key from.
@@ -146,7 +146,7 @@ void ctap_store_rk(int index,CTAP_residentKey * rk);
  * 
  * *Optional*, if not implemented, operates on non-persistant RK's.
 */
-void ctap_load_rk(int index,CTAP_residentKey * rk);
+void ctap_load_rk(int index, ctap_resident_key_t* rk);
 
 /** Overwrite the RK located in index with a new RK.
  * @param index to write resident key to.
@@ -154,7 +154,7 @@ void ctap_load_rk(int index,CTAP_residentKey * rk);
  * 
  * *Optional*, if not implemented, operates on non-persistant RK's.
 */
-void ctap_overwrite_rk(int index,CTAP_residentKey * rk);
+void ctap_overwrite_rk(int index, ctap_resident_key_t* rk);
 
 
 /** Called by HID layer to indicate that a wink behavior should be performed.

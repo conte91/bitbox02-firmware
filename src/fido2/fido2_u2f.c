@@ -171,6 +171,8 @@ int8_t u2f_new_keypair(struct u2f_key_handle * kh, uint8_t * appid, uint8_t * pu
 
 
 #endif
+
+#ifdef ENABLE_U2F
 static void u2f_make_auth_tag(struct u2f_key_handle * kh, uint8_t * appid, uint8_t * tag)
 {
     uint8_t hashbuf[32];
@@ -184,7 +186,6 @@ static void u2f_make_auth_tag(struct u2f_key_handle * kh, uint8_t * appid, uint8
 // Return 1 if authenticate, 0 if not.
 int8_t u2f_authenticate_credential(struct u2f_key_handle * kh, uint8_t key_handle_len, uint8_t * appid)
 {
-    printf1(TAG_U2F, "checked CRED SIZE %d. (FIDO2: %u)\n", key_handle_len, sizeof(CredentialId));
     uint8_t tag[U2F_KEY_HANDLE_TAG_SIZE];
 
     if (key_handle_len == sizeof(CredentialId))
@@ -218,6 +219,7 @@ int8_t u2f_authenticate_credential(struct u2f_key_handle * kh, uint8_t key_handl
     printf1(TAG_U2F, "inp  tag: \n"); dump_hex1(TAG_U2F,kh->tag, U2F_KEY_HANDLE_TAG_SIZE);
     return 0;
 }
+#endif
 
 #ifdef ENABLE_U2F
 

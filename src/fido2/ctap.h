@@ -8,6 +8,7 @@
 #define _CTAP_H
 
 #include <hardfault.h>
+#include <u2f/u2f_keyhandle.h>
 
 #ifdef assert
 #undef assert
@@ -93,6 +94,7 @@
 #define RESP_authData               0x02
 #define RESP_attStmt                0x03
 
+/* TODO: simone: change case */
 #define RESP_credential             0x01
 #define RESP_signature              0x03
 #define RESP_publicKeyCredentialUserEntity 0x04
@@ -116,95 +118,169 @@
 
 #define MC_requiredMask             (0x0f)
 
-
 #define CLIENT_DATA_HASH_SIZE       32  //sha256 hash
 #define DOMAIN_NAME_MAX_SIZE        253
 #define RP_NAME_LIMIT               32  // application limit, name parameter isn't needed.
 #define USER_ID_MAX_SIZE            64
-#define USER_NAME_LIMIT             65  // Must be minimum of 64 bytes but can be more.
+
+/**
+ * Maximum length of the CTAP username getting stored
+ * in a resident credential.
+ * Can be longer than 32B, but we only store this
+ * data for displaying it when authenticating.
+ * So if the actual length is longer we can just display
+ * a truncated string.
+ */
+#define CTAP_STORAGE_USER_NAME_LIMIT (25)
+
+/**
+ * Maximum length of the CTAP username getting stored
+ * in a resident credential.
+ * Can be longer than 32B, but we only store this
+ * data for displaying it when authenticating.
+ * So if the actual length is longer we can just display
+ * a truncated string.
+ */
+#define CTAP_STORAGE_RP_ID_MAX_SIZE (25)
+
+/**
+ * Maximum length of the CTAP username getting stored
+ * in a resident credential. It could be truncated.
+ */
+#define CTAP_STORAGE_DISPLAY_NAME_LIMIT (25)
+
+/** Maximum length of the CTAP username. */
+#define CTAP_USER_NAME_LIMIT             (64)
 #define DISPLAY_NAME_LIMIT          32  // Must be minimum of 64 bytes but can be more.
 #define ICON_LIMIT                  128 // Must be minimum of 64 bytes but can be more.
 #define CTAP_MAX_MESSAGE_SIZE       1200
 
 #define CREDENTIAL_RK_FLASH_PAD     2   // size of RK should be 8-byte aligned to store in flash easily.
-#define CREDENTIAL_TAG_SIZE         16
-#define CREDENTIAL_NONCE_SIZE       (16 + CREDENTIAL_RK_FLASH_PAD)
-#define CREDENTIAL_COUNTER_SIZE     (4)
-#define CREDENTIAL_ENC_SIZE         176  // pad to multiple of 16 bytes
+    #define CREDENTIAL_TAG_SIZE         16
+    #define CREDENTIAL_NONCE_SIZE       (16 + CREDENTIAL_RK_FLASH_PAD)
+    #define CREDENTIAL_COUNTER_SIZE     (4)
+    #define CREDENTIAL_ENC_SIZE         176  // pad to multiple of 16 bytes
 
-#define PUB_KEY_CRED_PUB_KEY        0x01
-#define PUB_KEY_CRED_CTAP1          0x41
-#define PUB_KEY_CRED_CUSTOM         0x42
-#define PUB_KEY_CRED_UNKNOWN        0x3F
+    #define PUB_KEY_CRED_PUB_KEY        0x01
+    #define PUB_KEY_CRED_CTAP1          0x41
+    #define PUB_KEY_CRED_CUSTOM         0x42
+    #define PUB_KEY_CRED_UNKNOWN        0x3F
 
-#define CREDENTIAL_IS_SUPPORTED     1
-#define CREDENTIAL_NOT_SUPPORTED    0
+    #define CREDENTIAL_IS_SUPPORTED     1
+    #define CREDENTIAL_NOT_SUPPORTED    0
 
-#define ALLOW_LIST_MAX_SIZE         20
+    #define CTAP_CREDENTIAL_LIST_MAX_SIZE 20
 
-#define NEW_PIN_ENC_MAX_SIZE        256     // includes NULL terminator
-#define NEW_PIN_ENC_MIN_SIZE        64
-#define NEW_PIN_MAX_SIZE            64
-#define NEW_PIN_MIN_SIZE            4
+    #define NEW_PIN_ENC_MAX_SIZE        256     // includes NULL terminator
+    #define NEW_PIN_ENC_MIN_SIZE        64
+    #define NEW_PIN_MAX_SIZE            64
+    #define NEW_PIN_MIN_SIZE            4
 
-#define CTAP_RESPONSE_BUFFER_SIZE   4096
+    #define CTAP_RESPONSE_BUFFER_SIZE   4096
 
-#define PIN_LOCKOUT_ATTEMPTS        8       // Number of attempts total
-#define PIN_BOOT_ATTEMPTS           3       // number of attempts per boot
+    #define PIN_LOCKOUT_ATTEMPTS        8       // Number of attempts total
+    #define PIN_BOOT_ATTEMPTS           3       // number of attempts per boot
 
-#define CTAP2_UP_DELAY_MS           29000
+    #define CTAP2_UP_DELAY_MS           29000
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpacked"
-
-typedef struct
-{
-    uint8_t id[USER_ID_MAX_SIZE];
-    uint8_t id_size;
-    uint8_t name[USER_NAME_LIMIT];
-    uint8_t displayName[DISPLAY_NAME_LIMIT];
-    uint8_t icon[ICON_LIMIT];
-}__attribute__((packed)) CTAP_userEntity;
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wpacked"
+    #pragma GCC diagnostic ignored "-Wattributes"
 
 typedef struct {
-    uint8_t tag[CREDENTIAL_TAG_SIZE];
-    uint8_t nonce[CREDENTIAL_NONCE_SIZE];
-    uint8_t rpIdHash[32];
-    uint32_t count;
-}__attribute__((packed)) CredentialId;
+    uint8_t id[USER_ID_MAX_SIZE];
+    uint8_t id_size;
+    uint8_t name[CTAP_USER_NAME_LIMIT];
+    uint8_t displayName[DISPLAY_NAME_LIMIT];
+    uint8_t icon[ICON_LIMIT];
+} ctap_user_entity_t;
 
-struct Credential {
-    CredentialId id;
-    CTAP_userEntity user;
-};
-typedef struct Credential CTAP_residentKey;
+#define CTAP_RESIDENT_KEY_VALID (0x01)
 
-typedef struct
-{
-    uint8_t type;
-    struct Credential credential;
-} CTAP_credentialDescriptor;
+/**
+ * Invalid keys have their "valid" field
+ * set to 0xFF so that erased flash is invalid.
+ */
+#define CTAP_RESIDENT_KEY_INVALID (0xff)
 
-typedef struct
-{
+typedef struct __attribute__((__packed__)) {
+    uint8_t valid;
+
+    /** Key handle (credential ID) */
+    u2f_keyhandle_t key_handle;
+
+    /**
+     * Human-readable ID of the RP that created the credential.
+     * This is a NULL-terminated string.
+     */
+    uint8_t rp_id[CTAP_STORAGE_RP_ID_MAX_SIZE];
+    /**
+     * sha256 hash of the original RP id.
+     * This is necessary (together with the ID) so
+     * that we can make check RP ids for matching values
+     * even if the actual RP id is longer than 32 bytes.
+     */
+    uint8_t rp_id_hash[32];
+    /**
+     * Username belonging to this credential.
+     * This is a NULL terminated string.
+     * Side effect: if a credential is created
+     * which matches the first CTAP_STORAGE_USER_NAME_LIMIT
+     * characters of the user and display name of an existing
+     * credential, the latter is going to be overwritten.
+     * Can this be used for evil purposes? (it shouldn't).
+     */
+    uint8_t user_name[CTAP_STORAGE_USER_NAME_LIMIT];
+    /**
+     * Display name of the user. Same considerations apply
+     * as for the user_name.
+     */
+    uint8_t display_name[CTAP_STORAGE_DISPLAY_NAME_LIMIT];
+    /**
+     * Creation "time" of the key.
+     * This is the value that the U2F counter had when the
+     * key got created. We must not store any real timestamp,
+     * but we must be able to sort keys by creation time.
+     */
+    uint32_t creation_time;
+} ctap_resident_key_t;
+
+/**
+ * Attested credential data, defined
+ * in [WebAuthn] 6.4.1.
+ */
+typedef struct __attribute__((packed)) {
+    /** The AAGUID of the authenticator. */
     uint8_t aaguid[16];
-    uint8_t credLenH;
-    uint8_t credLenL;
-    CredentialId id;
-} __attribute__((packed)) CTAP_attestHeader;
+    /** Length of the credential ID (big-endian) */
+    uint8_t cred_len[2];
+    /**  Credential ID */
+    u2f_keyhandle_t id;
+} ctap_attest_data_t;
 
-typedef struct
-{
+/**
+ * Authenticator data structure, to use
+ * for authentication operations. It is
+ * missing the attestedCredentialData
+ * field. Defined in The WebAuthn specs, 6.1.
+ */
+typedef struct __attribute__((packed)) {
     uint8_t rpIdHash[32];
     uint8_t flags;
     uint32_t signCount;
-} __attribute__((packed)) CTAP_authDataHeader;
+} ctap_auth_data_header_t;
 
-typedef struct
-{
-    CTAP_authDataHeader head;
-    CTAP_attestHeader attest;
-} __attribute__((packed)) CTAP_authData;
+/**
+ * Authenticator data structure, including
+ * the attestedCredentialData field.
+ * Defined in The WebAuthn specs, 6.1.
+ */
+typedef struct __attribute__((packed)) {
+    ctap_auth_data_header_t head;
+    ctap_attest_data_t attest;
+    /* COSE-encoded pubkey and extension data */
+    uint8_t other[310 - sizeof(ctap_auth_data_header_t) - sizeof(ctap_attest_data_t)];
+} ctap_auth_data_t;
 
 #pragma GCC diagnostic pop
 
@@ -218,6 +294,7 @@ typedef struct
 struct rpId
 {
     uint8_t id[DOMAIN_NAME_MAX_SIZE + 1];     // extra for NULL termination
+    /* TODO change to id_size */
     size_t size;
     uint8_t name[RP_NAME_LIMIT];
 };
@@ -239,7 +316,7 @@ typedef struct
     uint8_t saltEnc[64];
     uint8_t saltAuth[32];
     COSE_key keyAgreement;
-    struct Credential * credential;
+    u2f_keyhandle_t* key_handle;
 } CTAP_hmac_secret;
 
 typedef struct
@@ -250,7 +327,7 @@ typedef struct
 
 typedef struct
 {
-    CTAP_userEntity user;
+    ctap_user_entity_t user;
     uint8_t publicKeyCredentialType;
     int32_t COSEAlgorithmIdentifier;
     uint8_t rk;
@@ -292,22 +369,31 @@ typedef struct
 
     struct rpId rp;
 
-    int credLen;
-
     uint8_t rk;
     uint8_t uv;
     uint8_t up;
 
+    /* TODO remove pinAuth, we don't use it anyway. */
     uint8_t pinAuth[16];
     uint8_t pinAuthPresent;
-    // pinAuthEmpty is true iff an empty bytestring was provided as pinAuth.
-    // This is exclusive with |pinAuthPresent|. It exists because an empty
-    // pinAuth is a special signal to block for touch. See
-    // https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#using-pinToken-in-authenticatorGetAssertion
+    /**
+     * pinAuthEmpty is true iff an empty bytestring was provided as pinAuth.
+     * This is exclusive with |pinAuthPresent|. It exists because an empty
+     * pinAuth is a special signal to block for touch. See
+     * https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#using-pinToken-in-authenticatorGetAssertion
+     */
     uint8_t pinAuthEmpty;
     int pinProtocol;
 
-    CTAP_credentialDescriptor * creds;
+    /**
+     * List of allowed credential descriptors for authentication.
+     * If this parameter is present, then the authenticator MUST
+     * use one of these credentials to authenticate.
+     */
+    u2f_keyhandle_t creds[CTAP_CREDENTIAL_LIST_MAX_SIZE];
+    /** Number of credential descriptors present in this request. */
+    int credLen;
+
     uint8_t allowListPresent;
 
     CTAP_extensions extensions;
@@ -329,20 +415,6 @@ typedef struct
     _Bool getKeyAgreement;
     _Bool getRetries;
 } CTAP_clientPin;
-
-
-struct _getAssertionState {
-    CTAP_authDataHeader authData;
-    uint8_t clientDataHash[CLIENT_DATA_HASH_SIZE];
-    CTAP_credentialDescriptor creds[ALLOW_LIST_MAX_SIZE];
-    uint8_t lastcmd;
-    uint32_t count;
-    uint32_t index;
-    uint32_t time;
-    uint8_t user_verified;
-    uint8_t customCredId[256];
-    uint8_t customCredIdSize;
-};
 
 void ctap_response_init(CTAP_RESPONSE * resp);
 
@@ -393,5 +465,25 @@ void ctap_load_external_keys(uint8_t * keybytes);
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
 
 #include "ctap_logging.h"
+
+/**
+ * Auth data flags, defined in [WebAuthn] sec. 6.1. Authenticator Data.
+ */
+/**
+ * User is present/not present.
+ */
+#define CTAP_AUTH_DATA_FLAG_USER_PRESENT (1 << 0)
+/**
+ * User is verified/not verified.
+ */
+#define CTAP_AUTH_DATA_FLAG_USER_VERIFIED (1 << 2)
+/**
+ * Indicates whether the authenticator added attested credential data.
+ */
+#define CTAP_AUTH_DATA_FLAG_ATTESTED_CRED_DATA_INCLUDED (1 << 6)
+/**
+ * Indicates if the authenticator data has extensions.
+ */
+#define CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED (1 << 7)
 
 #endif // _CTAP_H

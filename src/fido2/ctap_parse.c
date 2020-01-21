@@ -16,6 +16,8 @@
 #include "cose_key.h"
 #include "util.h"
 
+#include <u2f/u2f_keyhandle.h>
+
 extern struct _getAssertionState getAssertionState;
 
 void _check_ret(CborError ret, int line, const char * filename)
@@ -146,13 +148,13 @@ uint8_t parse_user(CTAP_makeCredential * MC, CborValue * val)
                 printf2(TAG_ERR,"Error, expecting text string type for user.name value\n");
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
-            sz = USER_NAME_LIMIT;
+            sz = CTAP_USER_NAME_LIMIT;
             ret = cbor_value_copy_text_string(&map, (char *)MC->credInfo.user.name, &sz, NULL);
             if (ret != CborErrorOutOfMemory)
             {   // Just truncate the name it's okay
                 check_ret(ret);
             }
-            MC->credInfo.user.name[USER_NAME_LIMIT - 1] = 0;
+            MC->credInfo.user.name[CTAP_USER_NAME_LIMIT - 1] = 0;
         }
         else if (strcmp((const char *)key, "displayName") == 0)
         {
@@ -349,7 +351,7 @@ static uint8_t parse_verify_exclude_list(CborValue * val)
     int ret;
     CborValue arr;
     size_t size;
-    CTAP_credentialDescriptor cred;
+    u2f_keyhandle_t cred;
     if (cbor_value_get_type(val) != CborArrayType)
     {
         printf2(TAG_ERR,"error, exclude list is not a map\n");
@@ -361,7 +363,11 @@ static uint8_t parse_verify_exclude_list(CborValue * val)
     check_ret(ret);
     for (i = 0; i < size; i++)
     {
-        ret = parse_credential_descriptor(&arr, &cred);
+        bool cred_valid;
+        ret = parse_credential_descriptor(&arr, &cred, &cred_valid);
+        if (!cred_valid) {
+            return CTAP2_ERR_INVALID_CBOR;
+        }
         check_ret(ret);
         ret = cbor_value_advance(&arr);
         check_ret(ret);
@@ -882,94 +888,82 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
     return 0;
 }
 
-uint8_t parse_credential_descriptor(CborValue * arr, CTAP_credentialDescriptor * cred)
+uint8_t parse_credential_descriptor(CborValue* arr, u2f_keyhandle_t* cred, bool* cred_valid_out)
 {
     int ret;
     size_t buflen;
     char type[12];
     CborValue val;
-    cred->type = 0;
 
-    if (cbor_value_get_type(arr) != CborMapType)
-    {
+    if (cbor_value_get_type(arr) != CborMapType) {
         printf2(TAG_ERR,"Error, CborMapType expected in credential\n");
         return CTAP2_ERR_INVALID_CBOR_TYPE;
     }
 
+    /* Fetch the key handle. */
     ret = cbor_value_map_find_value(arr, "id", &val);
     check_ret(ret);
 
-    if (cbor_value_get_type(&val) != CborByteStringType)
-    {
-        printf2(TAG_ERR,"Error, No valid ID field (%s)\n", cbor_value_get_type_string(&val));
+    if (cbor_value_get_type(&val) != CborByteStringType) {
+        printf2(TAG_ERR,"Error, Wrong type for ID field (%s)\n", cbor_value_get_type_string(&val));
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
-    buflen = sizeof(CredentialId);
-    ret = cbor_value_copy_byte_string(&val, (uint8_t*)&cred->credential.id, &buflen, NULL);
+    buflen = sizeof(*cred);
+    ret = cbor_value_copy_byte_string(&val, (uint8_t*)cred, &buflen, NULL);
 
-    if (buflen == U2F_KEY_HANDLE_SIZE)
-    {
-        printf2(TAG_PARSE,"CTAP1 credential\n");
-        cred->type = PUB_KEY_CRED_CTAP1;
-    }
-    else if (buflen != sizeof(CredentialId))
-    {
-        printf2(TAG_ERR,"Ignoring credential is incorrect length, treating as custom\n");
-        cred->type = PUB_KEY_CRED_CUSTOM;
-        buflen = 256;
-        ret = cbor_value_copy_byte_string(&val, getAssertionState.customCredId, &buflen, NULL);
-        getAssertionState.customCredIdSize = buflen;
+    if (buflen < sizeof(*cred)) {
+        /* Not enough bytes to be a credential that we've generated. Skip it. */
+        printf2(TAG_ERR, "Ignoring credential of incorrect length.\n");
+        *cred_valid_out = false;
+        return 0;
     }
     check_ret(ret);
 
+    /* Now check the "type" field. */
     ret = cbor_value_map_find_value(arr, "type", &val);
     check_ret(ret);
 
-    if (cbor_value_get_type(&val) != CborTextStringType)
-    {
+    if (cbor_value_get_type(&val) != CborTextStringType) {
         printf2(TAG_ERR,"Error, No valid type field\n");
+        *cred_valid_out = false;
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
     buflen = sizeof(type);
     ret = cbor_value_copy_text_string(&val, type, &buflen, NULL);
-    if (ret == CborErrorOutOfMemory)
-    {
-        cred->type = PUB_KEY_CRED_UNKNOWN;
-    }
-    else
-    {
+    if (ret == CborErrorOutOfMemory) {
+        /*
+         * The type string is too big, so type type of the key
+         * is not something we know about.
+         */
+        *cred_valid_out = false;
+        return 0;
+    } else {
         check_ret(ret);
     }
 
-
-    if (strncmp(type, "public-key",11) == 0)
-    {
-        if (0 == cred->type)
-        {
-            cred->type = PUB_KEY_CRED_PUB_KEY;
-        }
-    }
-    else
-    {
-        cred->type = PUB_KEY_CRED_UNKNOWN;
+    if (strncmp(type, "public-key", 11) != 0) {
+        /* Not a keytype we know. */
+        *cred_valid_out = false;
         printf1(TAG_RED, "Unknown type: %s\r\n", type);
+        return 0;
     }
-
+    *cred_valid_out = true;
     return 0;
 }
 
 /**
  * Parses the list of allowed credentials into GA->creds.
+ * Updates GA->creds and GA->credLen.
+ * @return CTAP status code (0 is success).
  */
-static uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it)
+static uint8_t parse_allow_list(CTAP_getAssertion* GA, CborValue * it)
 {
     CborValue arr;
     size_t len;
     int ret;
     unsigned int i;
-    CTAP_credentialDescriptor * cred;
 
     if (cbor_value_get_type(it) != CborArrayType)
     {
@@ -986,36 +980,36 @@ static uint8_t parse_allow_list(CTAP_getAssertion * GA, CborValue * it)
     GA->credLen = 0;
 
     for (i = 0; i < len; i++) {
-        if (i >= ALLOW_LIST_MAX_SIZE) {
+        if (GA->credLen >= CTAP_CREDENTIAL_LIST_MAX_SIZE) {
             printf1(TAG_PARSE,"Error, out of memory for allow list.\n");
             return CTAP2_ERR_TOO_MANY_ELEMENTS;
         }
 
-        GA->credLen += 1;
-        cred = &GA->creds[i];
+        /* Check if this is a credential we should consider. */
+        bool cred_valid = false;
+        u2f_keyhandle_t* cred = &GA->creds[GA->credLen];
+        ret = parse_credential_descriptor(&arr, cred, &cred_valid);
 
-        ret = parse_credential_descriptor(&arr,cred);
         check_retr(ret);
+        if (cred_valid) {
+            GA->credLen += 1;
+        }
 
         ret = cbor_value_advance(&arr);
         check_ret(ret);
-
     }
     return 0;
 }
 
-
 uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request, int length)
 {
     int ret;
-    unsigned int i;
     int key;
     size_t map_length;
     CborParser parser;
     CborValue it,map;
 
     memset(GA, 0, sizeof(CTAP_getAssertion));
-    GA->creds = getAssertionState.creds;     // Save stack memory
     GA->up = 0xff;
 
     ret = cbor_parser_init(request, length, CborValidateCanonicalFormat, &parser, &it);
@@ -1036,8 +1030,7 @@ uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request
 
     printf1(TAG_GA,"GA map has %u elements\n",map_length);
 
-    for (i = 0; i < map_length; i++)
-    {
+    for (size_t i = 0; i < map_length; i++) {
         type = cbor_value_get_type(&map);
         if (type != CborIntegerType)
         {

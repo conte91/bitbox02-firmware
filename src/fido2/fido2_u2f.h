@@ -35,8 +35,6 @@
 #define U2F_REGISTER                        0x01
 #define U2F_AUTHENTICATE                    0x02
 #define U2F_VERSION                         0x03
-#define U2F_VENDOR_FIRST                    0xc0
-#define U2F_VENDOR_LAST                     0xff
 
 // U2F_CMD_REGISTER command defines
 #define U2F_REGISTER_ID                     0x05

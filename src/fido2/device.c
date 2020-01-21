@@ -80,56 +80,6 @@ int ctap_user_presence_test(const char* title, const char* prompt, uint32_t dela
     return result ? 1 : 0;
 }
 
-#define RK_NUM  50
-
-struct ResidentKeyStore {
-    CTAP_residentKey rks[RK_NUM];
-} RK_STORE;
-
-void ctap_load_rk(int index, CTAP_residentKey * rk)
-{
-    memmove(rk, RK_STORE.rks + index, sizeof(CTAP_residentKey));
-}
-
-void ctap_reset_rk(void)
-{
-    memset(&RK_STORE,0xff,sizeof(RK_STORE));
-}
-
-uint32_t ctap_rk_size(void)
-{
-    return RK_NUM;
-}
-
-void ctap_overwrite_rk(int index, CTAP_residentKey * rk)
-{
-    if (index < RK_NUM)
-    {
-        memmove(RK_STORE.rks + index, rk, sizeof(CTAP_residentKey));
-    }
-    else
-    {
-        printf1(TAG_ERR,"Out of bounds for store_rk\r\n");
-    }
-}
-
-void ctap_store_rk(int index, CTAP_residentKey * rk)
-{
-    if (index < RK_NUM)
-    {
-        memmove(RK_STORE.rks + index, rk, sizeof(CTAP_residentKey));
-    }
-    else
-    {
-        printf1(TAG_ERR,"Out of bounds for store_rk\r\n");
-    }
-
-}
-int device_is_nfc(void)
-{
-    return 0;
-}
-
 void device_wink(void)
 {
     printf1(TAG_GREEN,"*WINK*\n");

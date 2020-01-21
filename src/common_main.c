@@ -85,5 +85,5 @@ void common_main(void)
     if (!securechip_setup(&_securechip_interface_functions)) {
         Abort("securechip_setup failed");
     }
-    ctap_init();
+    //ctap_init();
 }

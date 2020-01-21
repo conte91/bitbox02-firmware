@@ -53,6 +53,7 @@ set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/workflow/restore.c
   ${CMAKE_SOURCE_DIR}/src/workflow/restore_from_mnemonic.c
   ${CMAKE_SOURCE_DIR}/src/workflow/sdcard.c
+  ${CMAKE_SOURCE_DIR}/src/workflow/select_ctap_credential.c
   ${CMAKE_SOURCE_DIR}/src/workflow/show_mnemonic.c
   ${CMAKE_SOURCE_DIR}/src/workflow/orientation_screen.c
   ${CMAKE_SOURCE_DIR}/src/workflow/status.c
@@ -79,6 +80,7 @@ set(DBB-FIRMWARE-USB-SOURCES
   ${CMAKE_SOURCE_DIR}/src/usb/usb.c
   ${CMAKE_SOURCE_DIR}/src/usb/usb_frame.c
   ${CMAKE_SOURCE_DIR}/src/usb/usb_packet.c
+  ${CMAKE_SOURCE_DIR}/src/usb/u2f/u2f_keys.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_packet.c
 )
 set(DBB-FIRMWARE-USB-SOURCES ${DBB-FIRMWARE-USB-SOURCES} PARENT_SCOPE)
@@ -510,6 +512,7 @@ if(CMAKE_CROSSCOMPILING)
       asf4-drivers-min
       asf4-drivers
     solo_crypto
+    wallycore
     )
   target_include_directories(fido2_crypto PRIVATE ${INCLUDES})
   target_include_directories(fido2_crypto SYSTEM PRIVATE ${SYSTEMINCLUDES})
