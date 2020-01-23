@@ -131,7 +131,7 @@ uint8_t parse_user(CTAP_makeCredential * MC, CborValue * val)
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
 
-            sz = USER_ID_MAX_SIZE;
+            sz = CTAP_USER_ID_MAX_SIZE;
             ret = cbor_value_copy_byte_string(&map, MC->credInfo.user.id, &sz, NULL);
             if (ret == CborErrorOutOfMemory)
             {

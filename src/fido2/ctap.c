@@ -630,6 +630,18 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)MC.credInfo.user.displayName);
         rk_to_store.valid = CTAP_RESIDENT_KEY_VALID;
         rk_to_store.creation_time = u2f_counter;
+        if (MC.credInfo.user.id_size > CTAP_USER_ID_MAX_SIZE) {
+            /* We can't store such a big user ID.
+             * But we can't even truncate it... So nothing we can do, alas.
+             */
+            return CTAP2_ERR_REQUEST_TOO_LARGE;
+        }
+        //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
+        //MC.credInfo.user.id_size,
+        //MC.credInfo.user.id[0], MC.credInfo.user.id[MC.credInfo.user.id_size - 1]
+        //);
+        rk_to_store.user_id_size = MC.credInfo.user.id_size;
+        memcpy(rk_to_store.user_id, MC.credInfo.user.id, MC.credInfo.user.id_size);
 
         int store_location = 0;
         bool must_overwrite = false;
@@ -670,9 +682,12 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
-        screen_print_debug("Stored key\n", 500);
+        //screen_sprintf_debug(500, "Stored key #%d\n", store_location);
+        //uint8_t* cred_raw = (uint8_t*)&rk_to_store.key_handle;
+        //screen_sprintf_debug(3000, "KH: %02x..%02x",
+        //cred_raw[0], cred_raw[15]);
     } else {
-        screen_print_debug("Not stored key\n", 500);
+        //screen_print_debug("Not stored key\n", 500);
     }
 
     /*
@@ -747,7 +762,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 
     ret = cbor_encoder_close_container(encoder, &attest_obj);
     check_ret(ret);
-    workflow_status_create("Registration completed.", true);
+    workflow_status_create("Registration\ncompleted.", true);
     return CTAP1_ERR_SUCCESS;
 }
 
@@ -797,17 +812,48 @@ static int _compare_display_credentials(const void * _a, const void * _b)
 }
 
 /**
+ * Adds the "publickKeyCredentialUserEntity" field to a CBOR
+ * object, containing the specified user id as its only field.
+ *
+ * @param user_id must be at least user_id_size wide.
+ * @param user_id_size Length of user_id.
+ */
+static uint8_t _encode_user_id(CborEncoder* map, const uint8_t* user_id, size_t user_id_size)
+{
+    CborEncoder entity;
+    int ret = cbor_encode_int(map, RESP_publicKeyCredentialUserEntity);
+    check_ret(ret);
+
+    ret = cbor_encoder_create_map(map, &entity, 1);
+    check_ret(ret);
+
+    {
+        ret = cbor_encode_text_string(&entity, "id", 2);
+        check_ret(ret);
+
+        ret = cbor_encode_byte_string(&entity, user_id, user_id_size);
+        check_ret(ret);
+    }
+
+    ret = cbor_encoder_close_container(map, &entity);
+    check_ret(ret);
+
+    return 0;
+}
+
+/**
  * Fills a getAssertion response, as defined in the FIDO2 specs, 5.2.
  *
  * The response map contains: 
  *    - Credential descriptor
  *    - Auth data
  *    - Signature
+ *    - User ID (if present)
  *
  * Note that we don't include any user data as there is no need for that
  * (the user has already been selected on the device).
  */
-static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* clientDataHash)
+static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* clientDataHash, const uint8_t* user_id, size_t user_id_size)
 {
     int ret;
     uint8_t signature[64];
@@ -815,7 +861,12 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     int encoded_sig_size;
     CborEncoder map;
 
-    ret = cbor_encoder_create_map(encoder, &map, 3);
+    int map_size = 3;
+    if (user_id_size) {
+        map_size++;
+    }
+    
+    ret = cbor_encoder_create_map(encoder, &map, map_size);
     check_ret(ret);
 
     ret = ctap_add_credential_descriptor(&map, key_handle);  // 1
@@ -841,6 +892,11 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
         check_ret(ret);
         ret = cbor_encode_byte_string(&map, encoded_sig, encoded_sig_size);
         check_ret(ret);
+    }
+    if (user_id_size)
+    {
+        ret = _encode_user_id(&map, user_id, user_id_size);  // 4
+        check_retr(ret);
     }
     ret = cbor_encoder_close_container(encoder, &map);
     return 0;
@@ -885,8 +941,11 @@ static void _authenticate_with_allow_list(CTAP_getAssertion* GA, u2f_keyhandle_t
  * @param chosen_credential_out Will be filled with the chosen credential.
  * @param chosen_privkey Will be filled with the the private key corresponding to chosen_credential.
  *                       Must be at least HMAC_SHA256_LEN bytes wide.
+ * @param user_id_out Will be filled with the stored User ID corresponding to the
+ *                    chosen credential. Must be CTAP_STORAGE_USER_NAME_LIMIT bytes long.
+ * @param user_id_size_out Will be filled with the size of user_id.
  */
-static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey)
+static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey, uint8_t* user_id_out, size_t* user_id_size_out)
 {
     /*
      * For each credential that we display, save which RK id it corresponds to.
@@ -939,6 +998,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
 
     /* Now load the credential that was selected in the output buffer. */
     ctap_resident_key_t selected_key;
+    //screen_sprintf_debug(500, "Selected cred #%d", cred_idx[selected_cred]);
     bool mem_result = memory_get_ctap_resident_key(cred_idx[selected_cred], &selected_key);
 
     if (!mem_result) {
@@ -946,7 +1006,17 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
         workflow_status_create("Internal error. Operation cancelled", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
+    /* Sanity check the stored credential. */
+    if (selected_key.valid != CTAP_RESIDENT_KEY_VALID ||
+        selected_key.user_id_size > CTAP_USER_ID_MAX_SIZE) {
+        //screen_sprintf_debug(1000, "BAD valid %d", selected_key.valid);
+        workflow_status_create("Internal error. Invalid key selected.", false);
+        return CTAP2_ERR_NO_CREDENTIALS;
+    }
     memcpy(chosen_credential_out, &selected_key.key_handle, sizeof(selected_key.key_handle));
+    *user_id_size_out = selected_key.user_id_size;
+    memcpy(user_id_out, selected_key.user_id, *user_id_size_out);
+
     /* Sanity check the key and extract the private key. */
     bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)chosen_credential_out, sizeof(*chosen_credential_out), chosen_privkey);
     if (!key_valid) {
@@ -1028,6 +1098,14 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     u2f_keyhandle_t auth_credential;
     uint8_t auth_privkey[HMAC_SHA256_LEN];
     UTIL_CLEANUP_32(auth_privkey);
+
+    /*
+     * When no allow list is present, it's mandatory that
+     * we add a user ID to the credential we return.
+     */
+    uint8_t user_id[CTAP_USER_ID_MAX_SIZE] = {0};
+    size_t user_id_size = 0;
+
     if (GA.credLen) {
         // allowlist is present -> check all the credentials that were actually generated by us.
         u2f_keyhandle_t* chosen_credential = NULL;
@@ -1036,25 +1114,32 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
             /* No credential selected (or no credential was known to the device). */
             return CTAP2_ERR_NO_CREDENTIALS;
         }
-        screen_print_debug("Used allow key\n", 500);
+        //screen_print_debug("Used allow key\n", 500);
         memcpy(&auth_credential, chosen_credential, sizeof(auth_credential));
     } else {
         // No allowList, so use all matching RK's matching rpId
-        uint8_t auth_status = _authenticate_with_rk(&GA, &auth_credential, auth_privkey);
+        uint8_t auth_status = _authenticate_with_rk(&GA, &auth_credential, auth_privkey, user_id, &user_id_size);
         if (auth_status != 0) {
             return auth_status;
         }
-        screen_print_debug("Retrieved key\n", 500);
+        //screen_print_debug("Retrieved key\n", 500);
+        //uint8_t* cred_raw = (uint8_t*)&auth_credential;
+        //screen_sprintf_debug(3000, "KH: %02x%02x",
+        //cred_raw[0], cred_raw[15]
+        //);
     }
 
     size_t actual_auth_data_size;
     ret = _make_authentication_response(&GA, auth_data_buf, &actual_auth_data_size);
     check_ret(ret);
 
-    ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash);
+    ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash, user_id, user_id_size);
+    //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
+    //user_id_size,
+    //user_id[0], user_id[user_id_size - 1]);
     check_ret(ret);
 
-    workflow_status_create("Authentication completed.", true);
+    workflow_status_create("Authentication\ncompleted.", true);
     return 0;
 }
 
