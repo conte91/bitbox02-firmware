@@ -30,6 +30,7 @@
 #include <util.h>
 #include <workflow/confirm.h>
 #include <workflow/select_ctap_credential.h>
+#include <workflow/status.h>
 #include <workflow/unlock.h>
 
 static uint8_t ctap_get_info(CborEncoder * encoder)
@@ -566,6 +567,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * User didn't authenticate.
          * Let's count this as a "user denied" error.
          */
+        workflow_status_create("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -576,6 +578,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      * the user's consent.
      */
     if (!_allow_make_credential(&MC)) {
+        workflow_status_create("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -591,13 +594,12 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     /* Update the U2F counter. */
     uint32_t u2f_counter;
     if (!securechip_u2f_counter_inc(&u2f_counter)) {
+        workflow_status_create("Failed to create key.", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
     ctap_auth_data_t auth_data;
     _compute_rpid_hash(&MC.rp, auth_data.head.rpIdHash);
-
-    device_set_status(CTAPHID_STATUS_PROCESSING);
 
     /* Generate the key. */
     memset((uint8_t*)&auth_data.attest.id, 0, sizeof(u2f_keyhandle_t));
@@ -658,16 +660,19 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             }
         }
         if (!free_spot_found) {
-            printf2(TAG_ERR, "Out of memory for resident keys\r\n");
+            workflow_status_create("Out of memory for resident keys", false);
             return CTAP2_ERR_KEY_STORE_FULL;
         }
         if (must_overwrite) {
             if (!_confirm_overwrite_credential()) {
+                workflow_status_create("Operation cancelled", false);
                 return CTAP2_ERR_OPERATION_DENIED;
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
         screen_print_debug("Stored key\n", 500);
+    } else {
+        screen_print_debug("Not stored key\n", 500);
     }
 
     /*
@@ -742,6 +747,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 
     ret = cbor_encoder_close_container(encoder, &attest_obj);
     check_ret(ret);
+    workflow_status_create("Registration completed.", true);
     return CTAP1_ERR_SUCCESS;
 }
 
@@ -919,6 +925,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
         }
     }
     if (creds.n_elems == 0) {
+        workflow_status_create("No credentials found on this device.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     /* Sort credentials by creation time. */
@@ -926,6 +933,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
     int selected_cred = workflow_select_ctap_credential(&creds);
     if (selected_cred < 0) {
         /* User aborted. */
+        workflow_status_create("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -935,12 +943,14 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
 
     if (!mem_result) {
         /* Shouldn't happen, but if it does we effectively don't have any valid credential to provide. */
+        workflow_status_create("Internal error. Operation cancelled", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     memcpy(chosen_credential_out, &selected_key.key_handle, sizeof(selected_key.key_handle));
     /* Sanity check the key and extract the private key. */
     bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)chosen_credential_out, sizeof(*chosen_credential_out), chosen_privkey);
     if (!key_valid) {
+        workflow_status_create("Internal error. Invalid key selected.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     return CTAP1_ERR_SUCCESS;
@@ -1026,6 +1036,7 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
             /* No credential selected (or no credential was known to the device). */
             return CTAP2_ERR_NO_CREDENTIALS;
         }
+        screen_print_debug("Used allow key\n", 500);
         memcpy(&auth_credential, chosen_credential, sizeof(auth_credential));
     } else {
         // No allowList, so use all matching RK's matching rpId
@@ -1033,6 +1044,7 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
         if (auth_status != 0) {
             return auth_status;
         }
+        screen_print_debug("Retrieved key\n", 500);
     }
 
     size_t actual_auth_data_size;
@@ -1042,6 +1054,7 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash);
     check_ret(ret);
 
+    workflow_status_create("Authentication completed.", true);
     return 0;
 }
 

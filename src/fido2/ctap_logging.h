@@ -19,8 +19,6 @@ inline void ctap_dump_hex1(const char* tag, const uint8_t* data, int length)
     printf("\n");
 }
 
-void ctap_dump_hex1(const char* tag, const uint8_t* data, int length);
-
 #define dump_hex1(tag, data, length) \
     do { \
         ctap_dump_hex1(#tag, data, length); \
