@@ -121,7 +121,7 @@
 #define CLIENT_DATA_HASH_SIZE       32  //sha256 hash
 #define DOMAIN_NAME_MAX_SIZE        253
 #define RP_NAME_LIMIT               32  // application limit, name parameter isn't needed.
-#define USER_ID_MAX_SIZE            64
+#define CTAP_USER_ID_MAX_SIZE            64
 
 /**
  * Maximum length of the CTAP username getting stored
@@ -131,7 +131,7 @@
  * So if the actual length is longer we can just display
  * a truncated string.
  */
-#define CTAP_STORAGE_USER_NAME_LIMIT (25)
+#define CTAP_STORAGE_USER_NAME_LIMIT (20)
 
 /**
  * Maximum length of the CTAP username getting stored
@@ -141,13 +141,13 @@
  * So if the actual length is longer we can just display
  * a truncated string.
  */
-#define CTAP_STORAGE_RP_ID_MAX_SIZE (25)
+#define CTAP_STORAGE_RP_ID_MAX_SIZE (20)
 
 /**
  * Maximum length of the CTAP username getting stored
  * in a resident credential. It could be truncated.
  */
-#define CTAP_STORAGE_DISPLAY_NAME_LIMIT (25)
+#define CTAP_STORAGE_DISPLAY_NAME_LIMIT (20)
 
 /** Maximum length of the CTAP username. */
 #define CTAP_USER_NAME_LIMIT             (64)
@@ -188,7 +188,7 @@
     #pragma GCC diagnostic ignored "-Wattributes"
 
 typedef struct {
-    uint8_t id[USER_ID_MAX_SIZE];
+    uint8_t id[CTAP_USER_ID_MAX_SIZE];
     uint8_t id_size;
     uint8_t name[CTAP_USER_NAME_LIMIT];
     uint8_t displayName[DISPLAY_NAME_LIMIT];
@@ -221,6 +221,16 @@ typedef struct __attribute__((__packed__)) {
      * even if the actual RP id is longer than 32 bytes.
      */
     uint8_t rp_id_hash[32];
+    /**
+     * User ID that the RP has assigned to our user.
+     * We need to store this and send it back together
+     * with our keyhandle when we're asked to authenticate.
+     */
+    uint8_t user_id[CTAP_USER_ID_MAX_SIZE];
+    /**
+     * Size of user_id.
+     */
+    uint8_t user_id_size;
     /**
      * Username belonging to this credential.
      * This is a NULL terminated string.
@@ -431,8 +441,6 @@ void ctap_load_external_keys(uint8_t * keybytes);
 #include <screen.h>
 
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
-
-#include "ctap_logging.h"
 
 /**
  * Auth data flags, defined in [WebAuthn] sec. 6.1. Authenticator Data.

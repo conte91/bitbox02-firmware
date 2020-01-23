@@ -13,13 +13,11 @@
 
 #include "cbor.h"
 #include "cose_key.h"
-#include "crypto.h"
 #include "ctaphid.h"
 #include "ctap_parse.h"
 #include "device.h"
 #include "extensions.h"
 #include "fido2_keys.h"
-#include "fido2_u2f.h"
 #include "storage.h"
 
 #include <memory/memory.h>
@@ -108,7 +106,7 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
                      * The option should be true/false based on whether the UV function has already
                      * been initialized.
                      */
-                    ret = cbor_encode_boolean(&options, device_is_uv_initialized());
+                    ret = cbor_encode_boolean(&options, true);
                     check_ret(ret);
                 }
 
@@ -206,11 +204,6 @@ static int ctap_add_cose_key(CborEncoder* cose_key, uint8_t* x, uint8_t* y, int3
     return 0;
 }
 
-static void ctap_flush_state(void)
-{
-    authenticator_write_state(&STATE);
-}
-
 /**
  * Encode the 32bit U2F counter value as a big-endian
  * sequence of bytes.
@@ -263,28 +256,6 @@ static int _is_matching_rk(ctap_resident_key_t* rk, ctap_resident_key_t* rk2)
             (memcmp(rk->user_name, rk2->user_name, CTAP_STORAGE_USER_NAME_LIMIT) == 0);
 }
 
-static int ctap2_user_presence_test(const char* title, const char* prompt)
-{
-    device_set_status(CTAPHID_STATUS_UPNEEDED);
-    int ret = ctap_user_presence_test(title, prompt, CTAP2_UP_DELAY_MS);
-    if ( ret > 1 )
-    {
-        return CTAP2_ERR_PROCESSING;
-    }
-    else if ( ret > 0 )
-    {
-        return CTAP1_ERR_SUCCESS;
-    }
-    else if (ret < 0)
-    {
-        return CTAP2_ERR_KEEPALIVE_CANCEL;
-    }
-    else
-    {
-        return CTAP2_ERR_ACTION_TIMEOUT;
-    }
-}
-
 static bool ctap_confirm_authentication(struct rpId* rp, bool up, bool uv)
 {
     (void)up;
@@ -302,8 +273,14 @@ static bool ctap_confirm_authentication(struct rpId* rp, bool up, bool uv)
     if (prompt_size >= 100) {
         prompt_buf[99] = '\0';
     }
-    int result = ctap2_user_presence_test("FIDO2", prompt_buf);
-    return result == CTAP1_ERR_SUCCESS;
+    return workflow_confirm_with_timeout(
+        "FIDO2", prompt_buf, NULL, false, 
+        /*
+         * We don't have realtime measures, 
+         * just use a heuristic to convert ms -> #ticks
+         */
+        CTAP2_UP_DELAY_MS * 4.7
+        );
 }
 
 /**
@@ -502,7 +479,7 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
     for (size_t i = 0; i < req->excludeListSize; i++) {
         u2f_keyhandle_t excl_cred;
         bool cred_valid;
-        uint8_t ret = parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
+        uint8_t ret = ctap_parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
         if (!cred_valid || ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
             /* Skip credentials that fail to parse. */
             continue;
@@ -514,7 +491,6 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
         bool key_is_ours = u2f_keyhandle_verify(req->rp.id, (uint8_t*)&excl_cred, sizeof(excl_cred), privkey);
         if (key_is_ours)
         {
-            printf1(TAG_MC, "Cred %u failed!\r\n",i);
             return true;
         }
 
@@ -524,6 +500,12 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
     return false;
 }
 
+static bool _ask_generic_authorization(void) {
+        return workflow_confirm_with_timeout(
+            "FIDO2", "Proceed?", NULL, false, CTAP2_UP_DELAY_MS * 4.7
+        );
+}
+
 static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
     CTAP_makeCredential MC;
     int ret;
@@ -531,7 +513,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     ret = ctap_parse_make_credential(&MC,encoder, request, length);
 
     if (ret != 0) {
-        printf2(TAG_ERR,"error, parse_make_credential failed\n");
         return ret;
     }
     if (MC.pinAuthEmpty) {
@@ -540,12 +521,14 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * The client is asking us if we support pin
          * (and asks to check for user presence before we move on).
          */
-        check_retr(ctap2_user_presence_test("FIDO2 pin", "Pin auth"));
+        bool result = _ask_generic_authorization();
+        if (!result) {
+            return CTAP2_ERR_OPERATION_DENIED;
+        }
         /* We don't support PIN semantics. */
         return CTAP2_ERR_PIN_NOT_SET;
     }
     if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask) {
-        printf2(TAG_ERR,"error, required parameter(s) for makeCredential are missing\n");
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
@@ -630,6 +613,18 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)MC.credInfo.user.displayName);
         rk_to_store.valid = CTAP_RESIDENT_KEY_VALID;
         rk_to_store.creation_time = u2f_counter;
+        if (MC.credInfo.user.id_size > CTAP_USER_ID_MAX_SIZE) {
+            /* We can't store such a big user ID.
+             * But we can't even truncate it... So nothing we can do, alas.
+             */
+            return CTAP2_ERR_REQUEST_TOO_LARGE;
+        }
+        //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
+        //MC.credInfo.user.id_size,
+        //MC.credInfo.user.id[0], MC.credInfo.user.id[MC.credInfo.user.id_size - 1]
+        //);
+        rk_to_store.user_id_size = MC.credInfo.user.id_size;
+        memcpy(rk_to_store.user_id, MC.credInfo.user.id, MC.credInfo.user.id_size);
 
         int store_location = 0;
         bool must_overwrite = false;
@@ -670,9 +665,12 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
-        screen_print_debug("Stored key\n", 500);
+        //screen_sprintf_debug(500, "Stored key #%d\n", store_location);
+        //uint8_t* cred_raw = (uint8_t*)&rk_to_store.key_handle;
+        //screen_sprintf_debug(3000, "KH: %02x..%02x",
+        //cred_raw[0], cred_raw[15]);
     } else {
-        screen_print_debug("Not stored key\n", 500);
+        //screen_print_debug("Not stored key\n", 500);
     }
 
     /*
@@ -699,8 +697,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     uint16_t key_length = sizeof(u2f_keyhandle_t);
     auth_data.attest.cred_len[0] = (key_length & 0xFF00) >> 8;
     auth_data.attest.cred_len[1] =  (key_length & 0x00FF);
-
-    printf1(TAG_GREEN, "MADE credId");
 
     CborEncoder cose_key;
     uint8_t* cose_key_buf = auth_data.other;
@@ -747,7 +743,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 
     ret = cbor_encoder_close_container(encoder, &attest_obj);
     check_ret(ret);
-    workflow_status_create("Registration completed.", true);
+    workflow_status_create("Registration\ncompleted.", true);
     return CTAP1_ERR_SUCCESS;
 }
 
@@ -797,17 +793,48 @@ static int _compare_display_credentials(const void * _a, const void * _b)
 }
 
 /**
+ * Adds the "publickKeyCredentialUserEntity" field to a CBOR
+ * object, containing the specified user id as its only field.
+ *
+ * @param user_id must be at least user_id_size wide.
+ * @param user_id_size Length of user_id.
+ */
+static uint8_t _encode_user_id(CborEncoder* map, const uint8_t* user_id, size_t user_id_size)
+{
+    CborEncoder entity;
+    int ret = cbor_encode_int(map, RESP_publicKeyCredentialUserEntity);
+    check_ret(ret);
+
+    ret = cbor_encoder_create_map(map, &entity, 1);
+    check_ret(ret);
+
+    {
+        ret = cbor_encode_text_string(&entity, "id", 2);
+        check_ret(ret);
+
+        ret = cbor_encode_byte_string(&entity, user_id, user_id_size);
+        check_ret(ret);
+    }
+
+    ret = cbor_encoder_close_container(map, &entity);
+    check_ret(ret);
+
+    return 0;
+}
+
+/**
  * Fills a getAssertion response, as defined in the FIDO2 specs, 5.2.
  *
  * The response map contains: 
  *    - Credential descriptor
  *    - Auth data
  *    - Signature
+ *    - User ID (if present)
  *
  * Note that we don't include any user data as there is no need for that
  * (the user has already been selected on the device).
  */
-static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* clientDataHash)
+static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* clientDataHash, const uint8_t* user_id, size_t user_id_size)
 {
     int ret;
     uint8_t signature[64];
@@ -815,7 +842,12 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     int encoded_sig_size;
     CborEncoder map;
 
-    ret = cbor_encoder_create_map(encoder, &map, 3);
+    int map_size = 3;
+    if (user_id_size) {
+        map_size++;
+    }
+    
+    ret = cbor_encoder_create_map(encoder, &map, map_size);
     check_ret(ret);
 
     ret = ctap_add_credential_descriptor(&map, key_handle);  // 1
@@ -828,8 +860,6 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
         check_ret(ret);
     }
 
-    crypto_ecc256_load_key((uint8_t*)key_handle, sizeof(*key_handle), NULL, 0);
-
     bool sig_success = _calculate_signature(privkey, auth_data_buf, auth_data_buf_sz, clientDataHash, signature);
     if (!sig_success) {
         return CTAP1_ERR_OTHER;
@@ -841,6 +871,11 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
         check_ret(ret);
         ret = cbor_encode_byte_string(&map, encoded_sig, encoded_sig_size);
         check_ret(ret);
+    }
+    if (user_id_size)
+    {
+        ret = _encode_user_id(&map, user_id, user_id_size);  // 4
+        check_retr(ret);
     }
     ret = cbor_encoder_close_container(encoder, &map);
     return 0;
@@ -885,8 +920,11 @@ static void _authenticate_with_allow_list(CTAP_getAssertion* GA, u2f_keyhandle_t
  * @param chosen_credential_out Will be filled with the chosen credential.
  * @param chosen_privkey Will be filled with the the private key corresponding to chosen_credential.
  *                       Must be at least HMAC_SHA256_LEN bytes wide.
+ * @param user_id_out Will be filled with the stored User ID corresponding to the
+ *                    chosen credential. Must be CTAP_STORAGE_USER_NAME_LIMIT bytes long.
+ * @param user_id_size_out Will be filled with the size of user_id.
  */
-static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey)
+static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey, uint8_t* user_id_out, size_t* user_id_size_out)
 {
     /*
      * For each credential that we display, save which RK id it corresponds to.
@@ -939,6 +977,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
 
     /* Now load the credential that was selected in the output buffer. */
     ctap_resident_key_t selected_key;
+    //screen_sprintf_debug(500, "Selected cred #%d", cred_idx[selected_cred]);
     bool mem_result = memory_get_ctap_resident_key(cred_idx[selected_cred], &selected_key);
 
     if (!mem_result) {
@@ -946,7 +985,17 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
         workflow_status_create("Internal error. Operation cancelled", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
+    /* Sanity check the stored credential. */
+    if (selected_key.valid != CTAP_RESIDENT_KEY_VALID ||
+        selected_key.user_id_size > CTAP_USER_ID_MAX_SIZE) {
+        //screen_sprintf_debug(1000, "BAD valid %d", selected_key.valid);
+        workflow_status_create("Internal error. Invalid key selected.", false);
+        return CTAP2_ERR_NO_CREDENTIALS;
+    }
     memcpy(chosen_credential_out, &selected_key.key_handle, sizeof(selected_key.key_handle));
+    *user_id_size_out = selected_key.user_id_size;
+    memcpy(user_id_out, selected_key.user_id, *user_id_size_out);
+
     /* Sanity check the key and extract the private key. */
     bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)chosen_credential_out, sizeof(*chosen_credential_out), chosen_privkey);
     if (!key_valid) {
@@ -995,12 +1044,14 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     int ret = ctap_parse_get_assertion(&GA, request, length);
 
     if (ret != 0) {
-        printf2(TAG_ERR,"error, parse_get_assertion failed\n");
         return ret;
     }
 
     if (GA.pinAuthEmpty) {
-        check_retr(ctap2_user_presence_test("FIDO2", "pinAuthEmpty"));
+        bool result = _ask_generic_authorization();
+        if (!result) {
+            return CTAP2_ERR_OPERATION_DENIED;
+        }
         return CTAP2_ERR_PIN_NOT_SET;
     }
     if (GA.pinAuthPresent) {
@@ -1013,7 +1064,6 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
-    printf1(TAG_GA, "CTAP_CREDENTIAL_LIST_MAX_SIZE has %d creds\n", GA.credLen);
 
     /*
      * Ask the user to confirm that he wants to authenticate.
@@ -1028,6 +1078,14 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     u2f_keyhandle_t auth_credential;
     uint8_t auth_privkey[HMAC_SHA256_LEN];
     UTIL_CLEANUP_32(auth_privkey);
+
+    /*
+     * When no allow list is present, it's mandatory that
+     * we add a user ID to the credential we return.
+     */
+    uint8_t user_id[CTAP_USER_ID_MAX_SIZE] = {0};
+    size_t user_id_size = 0;
+
     if (GA.credLen) {
         // allowlist is present -> check all the credentials that were actually generated by us.
         u2f_keyhandle_t* chosen_credential = NULL;
@@ -1036,25 +1094,32 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
             /* No credential selected (or no credential was known to the device). */
             return CTAP2_ERR_NO_CREDENTIALS;
         }
-        screen_print_debug("Used allow key\n", 500);
+        //screen_print_debug("Used allow key\n", 500);
         memcpy(&auth_credential, chosen_credential, sizeof(auth_credential));
     } else {
         // No allowList, so use all matching RK's matching rpId
-        uint8_t auth_status = _authenticate_with_rk(&GA, &auth_credential, auth_privkey);
+        uint8_t auth_status = _authenticate_with_rk(&GA, &auth_credential, auth_privkey, user_id, &user_id_size);
         if (auth_status != 0) {
             return auth_status;
         }
-        screen_print_debug("Retrieved key\n", 500);
+        //screen_print_debug("Retrieved key\n", 500);
+        //uint8_t* cred_raw = (uint8_t*)&auth_credential;
+        //screen_sprintf_debug(3000, "KH: %02x%02x",
+        //cred_raw[0], cred_raw[15]
+        //);
     }
 
     size_t actual_auth_data_size;
     ret = _make_authentication_response(&GA, auth_data_buf, &actual_auth_data_size);
     check_ret(ret);
 
-    ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash);
+    ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash, user_id, user_id_size);
+    //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
+    //user_id_size,
+    //user_id[0], user_id[user_id_size - 1]);
     check_ret(ret);
 
-    workflow_status_create("Authentication completed.", true);
+    workflow_status_create("Authentication\ncompleted.", true);
     return 0;
 }
 
@@ -1077,178 +1142,48 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
 
     cbor_encoder_init(&encoder, buf, USB_DATA_MAX_LEN, 0);
 
-    printf1(TAG_CTAP,"cbor input structure: %d bytes\n", length);
-    printf1(TAG_DUMP,"cbor req: "); dump_hex1(TAG_DUMP, pkt_raw, length);
-
-    printf1(TAG_DUMP,"cbor cmd: %d\n", cmd);
 
     switch(cmd)
     {
         case CTAP_MAKE_CREDENTIAL:
-            printf1(TAG_CTAP,"CTAP_MAKE_CREDENTIAL\n");
             status = ctap_make_credential(&encoder, pkt_raw, length);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-            dump_hex1(TAG_DUMP, buf, *out_len);
 
             break;
         case CTAP_GET_ASSERTION:
-            printf1(TAG_CTAP,"CTAP_GET_ASSERTION\n");
             status = ctap_get_assertion(&encoder, pkt_raw, length);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
 
-            printf1(TAG_DUMP,"cbor [%u]: \n",  *out_len);
-                dump_hex1(TAG_DUMP,buf, *out_len);
             break;
         case CTAP_CANCEL:
-            printf1(TAG_CTAP,"CTAP_CANCEL\n");
             break;
         case CTAP_GET_INFO:
-            printf1(TAG_CTAP,"CTAP_GET_INFO\n");
             status = ctap_get_info(&encoder);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-            printf("Resp len: %u\n", *out_len);
-            dump_hex1(TAG_DUMP, buf, *out_len);
 
             break;
         case CTAP_CLIENT_PIN:
-            printf1(TAG_CTAP,"CTAP_CLIENT_PIN\n");
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case CTAP_RESET:
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case GET_NEXT_ASSERTION:
-            printf1(TAG_CTAP,"CTAP_NEXT_ASSERTION\n");
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         default:
             status = CTAP1_ERR_INVALID_COMMAND;
-            printf2(TAG_ERR,"error, invalid cmd: 0x%02x\n", cmd);
     }
-
-    device_set_status(CTAPHID_STATUS_IDLE);
 
     if (status != CTAP1_ERR_SUCCESS)
     {
         *out_len = 0;
     }
 
-    printf1(TAG_CTAP,"cbor output structure: %u bytes.  Return 0x%02x\n", *out_len, status);
 
     return status;
-}
-
-/** Overwrite master secret from external source.
- * @param keybytes an array of KEY_SPACE_BYTES length.
- *
- * This function should only be called from a privilege mode.
-*/
-void ctap_load_external_keys(uint8_t * keybytes){
-    memmove(STATE.key_space, keybytes, KEY_SPACE_BYTES);
-    authenticator_write_state(&STATE);
-    crypto_load_master_secret(STATE.key_space);
-}
-
-#include "version.h"
-
-static uint16_t ctap_keys_stored(void)
-{
-    int total = 0;
-    int i;
-    for (i = 0; i < MAX_KEYS; i++)
-    {
-        if (STATE.key_lens[i] != 0xffff)
-        {
-            total += 1;
-        }
-        else
-        {
-            break;
-        }
-    }
-    return total;
-}
-
-static uint16_t key_addr_offset(int index)
-{
-    uint16_t offset = 0;
-    int i;
-    for (i = 0; i < index; i++)
-    {
-        if (STATE.key_lens[i] != 0xffff) offset += STATE.key_lens[i];
-    }
-    return offset;
-}
-
-uint16_t ctap_key_len(uint8_t index)
-{
-    int i = ctap_keys_stored();
-    if (index >= i || index >= MAX_KEYS)
-    {
-        return 0;
-    }
-    if (STATE.key_lens[index] == 0xffff) return 0;
-    return STATE.key_lens[index];
-
-}
-
-int8_t ctap_store_key(uint8_t index, uint8_t * key, uint16_t len)
-{
-    int i = ctap_keys_stored();
-    uint16_t offset;
-    if (i >= MAX_KEYS || index >= MAX_KEYS || !len)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    if (STATE.key_lens[index] != 0xffff)
-    {
-        return ERR_KEY_SPACE_TAKEN;
-    }
-
-    offset = key_addr_offset(index);
-
-    if ((offset + len) > KEY_SPACE_BYTES)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    STATE.key_lens[index] = len;
-
-    memmove(STATE.key_space + offset, key, len);
-
-    ctap_flush_state();
-
-    return 0;
-}
-
-int8_t ctap_load_key(uint8_t index, uint8_t * key)
-{
-    int i = ctap_keys_stored();
-    uint16_t offset;
-    uint16_t len;
-    if (index >= i || index >= MAX_KEYS) {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    if (STATE.key_lens[index] == 0xffff)
-    {
-        return ERR_KEY_SPACE_EMPTY;
-    }
-
-    offset = key_addr_offset(index);
-    len = ctap_key_len(index);
-
-    if ((offset + len) > KEY_SPACE_BYTES)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    memmove(key, STATE.key_space + offset, len);
-
-    return 0;
 }
 
