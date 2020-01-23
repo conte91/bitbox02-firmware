@@ -35,7 +35,6 @@ uint8_t parse_cose_key(CborValue * it, COSE_key * cose);
 
 uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encoder, const uint8_t* request, int length);
 uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t* request, int length);
-uint8_t ctap_parse_client_pin(CTAP_clientPin * CP, const uint8_t* request, int length);
 uint8_t parse_credential_descriptor(CborValue * arr, u2f_keyhandle_t* cred, bool* cred_valid_out);
 
 

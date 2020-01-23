@@ -400,22 +400,6 @@ typedef struct
 
 } CTAP_getAssertion;
 
-typedef struct
-{
-    int pinProtocol;
-    int subCommand;
-    COSE_key keyAgreement;
-    uint8_t keyAgreementPresent;
-    uint8_t pinAuth[16];
-    uint8_t pinAuthPresent;
-    uint8_t newPinEnc[NEW_PIN_ENC_MAX_SIZE];
-    int newPinEncSize;
-    uint8_t pinHashEnc[16];
-    uint8_t pinHashEncPresent;
-    _Bool getKeyAgreement;
-    _Bool getRetries;
-} CTAP_clientPin;
-
 void ctap_response_init(CTAP_RESPONSE * resp);
 
 uint8_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
@@ -426,22 +410,6 @@ int ctap_encode_der_sig(uint8_t const * const in_sigbuf, uint8_t * const out_sig
 
 // Run ctap related power-up procedures (init pinToken, generate shared secret)
 void ctap_init(void);
-
-// Resets state between different accesses of different applications
-void ctap_reset_state(void);
-
-uint8_t ctap_add_pin_if_verified(uint8_t * pinTokenEnc, uint8_t * platform_pubkey, uint8_t * pinHashEnc);
-uint8_t ctap_update_pin_if_verified(uint8_t * pinEnc, int len, uint8_t * platform_pubkey, uint8_t * pinAuth, uint8_t * pinHashEnc);
-
-void ctap_update_pin(uint8_t * pin, int len);
-uint8_t ctap_decrement_pin_attempts(void);
-int8_t ctap_leftover_pin_attempts(void);
-void ctap_reset_pin_attempts(void);
-uint8_t ctap_is_pin_set(void);
-uint8_t ctap_pin_matches(uint8_t * pin, int len);
-void ctap_reset(void);
-int8_t ctap_device_locked(void);
-int8_t ctap_device_boot_locked(void);
 
 // Key storage API
 
