@@ -18,7 +18,6 @@
 #include "device.h"
 #include "extensions.h"
 #include "fido2_keys.h"
-#include "fido2_u2f.h"
 #include "storage.h"
 
 #include <memory/memory.h>

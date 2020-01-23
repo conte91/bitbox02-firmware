@@ -213,7 +213,6 @@ set(FIRMWARE-U2F-SOURCES
   ${CMAKE_SOURCE_DIR}/src/fido2/ctap_parse.c
   ${CMAKE_SOURCE_DIR}/src/fido2/device.c
   ${CMAKE_SOURCE_DIR}/src/fido2/fido2_keys.c
-  ${CMAKE_SOURCE_DIR}/src/fido2/fido2_u2f.c
   ${CMAKE_SOURCE_DIR}/src/fido2/extensions.c
   ${CMAKE_SOURCE_DIR}/src/u2f.c
   ${CMAKE_SOURCE_DIR}/src/u2f/u2f_app.c

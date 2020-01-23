@@ -10,7 +10,6 @@
 #include "cbor.h"
 
 #include "ctap.h"
-#include "fido2_u2f.h"
 #include "ctap_parse.h"
 #include "ctap_errors.h"
 #include "cose_key.h"
