@@ -8,7 +8,6 @@
 #include "fido2_u2f.h"
 #include "ctap.h"
 #include "ctaphid.h"
-#include "crypto.h"
 #include "device.h"
 
 #ifdef ENABLE_U2F

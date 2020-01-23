@@ -13,7 +13,6 @@
 
 #include "cbor.h"
 #include "cose_key.h"
-#include "crypto.h"
 #include "ctaphid.h"
 #include "ctap_parse.h"
 #include "device.h"
@@ -204,11 +203,6 @@ static int ctap_add_cose_key(CborEncoder* cose_key, uint8_t* x, uint8_t* y, int3
     check_ret(ret);
 
     return 0;
-}
-
-static void ctap_flush_state(void)
-{
-    authenticator_write_state(&STATE);
 }
 
 /**
@@ -879,8 +873,6 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
         check_ret(ret);
     }
 
-    crypto_ecc256_load_key((uint8_t*)key_handle, sizeof(*key_handle), NULL, 0);
-
     bool sig_success = _calculate_signature(privkey, auth_data_buf, auth_data_buf_sz, clientDataHash, signature);
     if (!sig_success) {
         return CTAP1_ERR_OTHER;
@@ -1224,116 +1216,5 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
     printf1(TAG_CTAP,"cbor output structure: %u bytes.  Return 0x%02x\n", *out_len, status);
 
     return status;
-}
-
-/** Overwrite master secret from external source.
- * @param keybytes an array of KEY_SPACE_BYTES length.
- *
- * This function should only be called from a privilege mode.
-*/
-void ctap_load_external_keys(uint8_t * keybytes){
-    memmove(STATE.key_space, keybytes, KEY_SPACE_BYTES);
-    authenticator_write_state(&STATE);
-    crypto_load_master_secret(STATE.key_space);
-}
-
-#include "version.h"
-
-static uint16_t ctap_keys_stored(void)
-{
-    int total = 0;
-    int i;
-    for (i = 0; i < MAX_KEYS; i++)
-    {
-        if (STATE.key_lens[i] != 0xffff)
-        {
-            total += 1;
-        }
-        else
-        {
-            break;
-        }
-    }
-    return total;
-}
-
-static uint16_t key_addr_offset(int index)
-{
-    uint16_t offset = 0;
-    int i;
-    for (i = 0; i < index; i++)
-    {
-        if (STATE.key_lens[i] != 0xffff) offset += STATE.key_lens[i];
-    }
-    return offset;
-}
-
-uint16_t ctap_key_len(uint8_t index)
-{
-    int i = ctap_keys_stored();
-    if (index >= i || index >= MAX_KEYS)
-    {
-        return 0;
-    }
-    if (STATE.key_lens[index] == 0xffff) return 0;
-    return STATE.key_lens[index];
-
-}
-
-int8_t ctap_store_key(uint8_t index, uint8_t * key, uint16_t len)
-{
-    int i = ctap_keys_stored();
-    uint16_t offset;
-    if (i >= MAX_KEYS || index >= MAX_KEYS || !len)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    if (STATE.key_lens[index] != 0xffff)
-    {
-        return ERR_KEY_SPACE_TAKEN;
-    }
-
-    offset = key_addr_offset(index);
-
-    if ((offset + len) > KEY_SPACE_BYTES)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    STATE.key_lens[index] = len;
-
-    memmove(STATE.key_space + offset, key, len);
-
-    ctap_flush_state();
-
-    return 0;
-}
-
-int8_t ctap_load_key(uint8_t index, uint8_t * key)
-{
-    int i = ctap_keys_stored();
-    uint16_t offset;
-    uint16_t len;
-    if (index >= i || index >= MAX_KEYS) {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    if (STATE.key_lens[index] == 0xffff)
-    {
-        return ERR_KEY_SPACE_EMPTY;
-    }
-
-    offset = key_addr_offset(index);
-    len = ctap_key_len(index);
-
-    if ((offset + len) > KEY_SPACE_BYTES)
-    {
-        return ERR_NO_KEY_SPACE;
-    }
-
-    memmove(key, STATE.key_space + offset, len);
-
-    return 0;
 }
 

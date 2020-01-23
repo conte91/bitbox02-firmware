@@ -3,7 +3,7 @@
 
 #if defined(SEMIHOSTING)
 
-inline void dump_hex(const uint8_t* buf, int size)
+static inline void dump_hex(const uint8_t* buf, int size)
 {
     while(size--)
     {
@@ -12,7 +12,7 @@ inline void dump_hex(const uint8_t* buf, int size)
     printf("\n");
 }
 
-inline void ctap_dump_hex1(const char* tag, const uint8_t* data, int length)
+static inline void ctap_dump_hex1(const char* tag, const uint8_t* data, int length)
 {
     printf("%s: ",  tag);
     dump_hex(data,length);
