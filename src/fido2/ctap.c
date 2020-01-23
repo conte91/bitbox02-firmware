@@ -495,7 +495,7 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
     for (size_t i = 0; i < req->excludeListSize; i++) {
         u2f_keyhandle_t excl_cred;
         bool cred_valid;
-        uint8_t ret = parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
+        uint8_t ret = ctap_parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
         if (!cred_valid || ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
             /* Skip credentials that fail to parse. */
             continue;
@@ -507,7 +507,6 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
         bool key_is_ours = u2f_keyhandle_verify(req->rp.id, (uint8_t*)&excl_cred, sizeof(excl_cred), privkey);
         if (key_is_ours)
         {
-            printf1(TAG_MC, "Cred %u failed!\r\n",i);
             return true;
         }
 
@@ -524,7 +523,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     ret = ctap_parse_make_credential(&MC,encoder, request, length);
 
     if (ret != 0) {
-        printf2(TAG_ERR,"error, parse_make_credential failed\n");
         return ret;
     }
     if (MC.pinAuthEmpty) {
@@ -538,7 +536,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         return CTAP2_ERR_PIN_NOT_SET;
     }
     if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask) {
-        printf2(TAG_ERR,"error, required parameter(s) for makeCredential are missing\n");
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
@@ -707,8 +704,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     uint16_t key_length = sizeof(u2f_keyhandle_t);
     auth_data.attest.cred_len[0] = (key_length & 0xFF00) >> 8;
     auth_data.attest.cred_len[1] =  (key_length & 0x00FF);
-
-    printf1(TAG_GREEN, "MADE credId");
 
     CborEncoder cose_key;
     uint8_t* cose_key_buf = auth_data.other;
@@ -1056,7 +1051,6 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     int ret = ctap_parse_get_assertion(&GA, request, length);
 
     if (ret != 0) {
-        printf2(TAG_ERR,"error, parse_get_assertion failed\n");
         return ret;
     }
 
@@ -1074,7 +1068,6 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
         return CTAP2_ERR_MISSING_PARAMETER;
     }
 
-    printf1(TAG_GA, "CTAP_CREDENTIAL_LIST_MAX_SIZE has %d creds\n", GA.credLen);
 
     /*
      * Ask the user to confirm that he wants to authenticate.
@@ -1153,56 +1146,40 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
 
     cbor_encoder_init(&encoder, buf, USB_DATA_MAX_LEN, 0);
 
-    printf1(TAG_CTAP,"cbor input structure: %d bytes\n", length);
-    printf1(TAG_DUMP,"cbor req: "); dump_hex1(TAG_DUMP, pkt_raw, length);
-
-    printf1(TAG_DUMP,"cbor cmd: %d\n", cmd);
 
     switch(cmd)
     {
         case CTAP_MAKE_CREDENTIAL:
-            printf1(TAG_CTAP,"CTAP_MAKE_CREDENTIAL\n");
             status = ctap_make_credential(&encoder, pkt_raw, length);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-            dump_hex1(TAG_DUMP, buf, *out_len);
 
             break;
         case CTAP_GET_ASSERTION:
-            printf1(TAG_CTAP,"CTAP_GET_ASSERTION\n");
             status = ctap_get_assertion(&encoder, pkt_raw, length);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
 
-            printf1(TAG_DUMP,"cbor [%u]: \n",  *out_len);
-                dump_hex1(TAG_DUMP,buf, *out_len);
             break;
         case CTAP_CANCEL:
-            printf1(TAG_CTAP,"CTAP_CANCEL\n");
             break;
         case CTAP_GET_INFO:
-            printf1(TAG_CTAP,"CTAP_GET_INFO\n");
             status = ctap_get_info(&encoder);
 
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-            printf("Resp len: %u\n", *out_len);
-            dump_hex1(TAG_DUMP, buf, *out_len);
 
             break;
         case CTAP_CLIENT_PIN:
-            printf1(TAG_CTAP,"CTAP_CLIENT_PIN\n");
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case CTAP_RESET:
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case GET_NEXT_ASSERTION:
-            printf1(TAG_CTAP,"CTAP_NEXT_ASSERTION\n");
             status = CTAP2_ERR_NOT_ALLOWED;
             break;
         default:
             status = CTAP1_ERR_INVALID_COMMAND;
-            printf2(TAG_ERR,"error, invalid cmd: 0x%02x\n", cmd);
     }
 
     device_set_status(CTAPHID_STATUS_IDLE);
@@ -1212,7 +1189,6 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
         *out_len = 0;
     }
 
-    printf1(TAG_CTAP,"cbor output structure: %u bytes.  Return 0x%02x\n", *out_len, status);
 
     return status;
 }

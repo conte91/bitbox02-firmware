@@ -442,8 +442,6 @@ void ctap_load_external_keys(uint8_t * keybytes);
 
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
 
-#include "ctap_logging.h"
-
 /**
  * Auth data flags, defined in [WebAuthn] sec. 6.1. Authenticator Data.
  */

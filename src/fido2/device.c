@@ -80,11 +80,6 @@ int ctap_user_presence_test(const char* title, const char* prompt, uint32_t dela
     return result ? 1 : 0;
 }
 
-void device_wink(void)
-{
-    printf1(TAG_GREEN,"*WINK*\n");
-}
-
 void device_set_clock_rate(DEVICE_CLOCK_RATE param)
 {
     (void)param;
