@@ -18,6 +18,7 @@
 #include "ctap_parse.h"
 #include "device.h"
 #include "extensions.h"
+#include "fido2_keys.h"
 #include "fido2_u2f.h"
 #include "storage.h"
 
@@ -26,10 +27,10 @@
 #include <screen.h>
 #include <securechip/securechip.h>
 #include <usb/usb_packet.h>
-#include <usb/u2f/u2f_keys.h>
 #include <util.h>
 #include <workflow/confirm.h>
 #include <workflow/select_ctap_credential.h>
+#include <workflow/unlock.h>
 
 static inline int timestamp(void) {
     /* Does nothing. */
@@ -506,7 +507,7 @@ static int _encode_der_sig(const uint8_t* sig, uint8_t* out_encoded_sig)
  * @param[in] client_data_hash Hash of the serialized client data.
  * @param[out] sigbuf_out Buffer in which to store the computed signature
  */
-static bool _calculate_signature(uint8_t* privkey, uint8_t* auth_data, size_t auth_data_len, uint8_t* client_data_hash, uint8_t* sigbuf_out)
+static bool _calculate_signature(const uint8_t* privkey, uint8_t* auth_data, size_t auth_data_len, uint8_t* client_data_hash, uint8_t* sigbuf_out)
 {
     uint8_t hash_buf[SHA256_LEN];
 
@@ -533,8 +534,8 @@ static uint8_t _add_attest_statement(CborEncoder* map, const uint8_t* signature,
 {
     int ret;
     /* TODO: simo: generate another cert? */
-    const uint8_t *cert = U2F_ATT_CERT;
-    uint16_t cert_size = U2F_ATT_CERT_SIZE;
+    const uint8_t *cert = FIDO2_ATT_CERT;
+    uint16_t cert_size = FIDO2_ATT_CERT_SIZE;
 
     CborEncoder stmtmap;
     CborEncoder x5carr;
@@ -596,6 +597,74 @@ static bool _confirm_overwrite_credential(void) {
     return true;
 }
 
+/**
+ * Asks the user whether he wants to proceed
+ * with the creation of a new credential.
+ * @param req MakeCredential CTAP request.
+ * @return Whether the user has agreed or not.
+ */
+static bool _allow_make_credential(CTAP_makeCredential* req)
+{
+    char prompt_buf[100];
+    size_t prompt_size;
+    if (req->rp.name && req->rp.name[0] != '\0') {
+        /* There is a human-readable name attached to this domain. */
+        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%s\n(%.*s)\n",
+                               req->rp.name, (int)req->rp.size, req->rp.id);
+    } else {
+        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%.*s\n",
+                               (int)req->rp.size, req->rp.id);
+    }
+    if (prompt_size >= 100) {
+        prompt_buf[99] = '\0';
+    }
+    return workflow_confirm_with_timeout(
+        "FIDO2", prompt_buf, NULL, false, 
+        /*
+         * We don't have realtime measures, 
+         * just use a heuristic to convert ms -> #ticks
+         */
+        CTAP2_UP_DELAY_MS * 4.7
+        );
+}
+
+/**
+ * Check if any of the keys in a MakeCredential's
+ * excludeList belong to our device.
+ *
+ * @param req MakeCredential request to analyze.
+ * @return Verification status:
+ *             - 0 if no invalid key was found;
+ *             - CTAP2_ERR_CREDENTIAL_EXCLUDED if an excluded key belongs to us;
+ *             - other errors if we failed to parse the exclude list.
+ */
+static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
+{
+    for (size_t i = 0; i < req->excludeListSize; i++) {
+        u2f_keyhandle_t excl_cred;
+        bool cred_valid;
+        uint8_t ret = parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
+        if (!cred_valid || ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
+            /* Skip credentials that fail to parse. */
+            continue;
+        }
+        check_retr(ret);
+
+        uint8_t privkey[HMAC_SHA256_LEN];
+        UTIL_CLEANUP_32(privkey);
+        bool key_is_ours = u2f_keyhandle_verify(req->rp.id, (uint8_t*)&excl_cred, sizeof(excl_cred), privkey);
+        if (key_is_ours)
+        {
+            printf1(TAG_MC, "Cred %u failed!\r\n",i);
+            return true;
+        }
+
+        ret = cbor_value_advance(&req->excludeList);
+        check_ret(ret);
+    }
+    return false;
+}
+
 static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
     CTAP_makeCredential MC;
     int ret;
@@ -634,34 +703,21 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         return CTAP2_ERR_INVALID_OPTION;
     }
 
+    if (!workflow_unlock()) {
+        /*
+         * User didn't authenticate.
+         * Let's count this as a "user denied" error.
+         */
+        return CTAP2_ERR_OPERATION_DENIED;
+    }
+
     /*
      * Request permission to the user.
      * This must be done before checking for excluded credentials etc.
      * so that we don't reveal the existance of credentials without
      * the user's consent.
      */
-    char prompt_buf[100];
-    size_t prompt_size;
-    if (MC.rp.name && MC.rp.name[0] != '\0') {
-        /* There is a human-readable name attached to this domain. */
-        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%s\n(%.*s)\n",
-                                  MC.rp.name, (int)MC.rp.size, MC.rp.id);
-    } else {
-        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%.*s\n",
-                                  (int)MC.rp.size, MC.rp.id);
-    }
-    if (prompt_size >= 100) {
-        prompt_buf[99] = '\0';
-    }
-    bool user_consent = workflow_confirm_with_timeout(
-        "FIDO2", prompt_buf, NULL, false, 
-        /*
-         * We don't have realtime measures, 
-         * just use a heuristic to convert ms -> #ticks
-         */
-        CTAP2_UP_DELAY_MS * 4.7
-        );
-    if (!user_consent) {
+    if (!_allow_make_credential(&MC)) {
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -671,28 +727,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      * we must return with an error. This allows the server to avoid
      * us creating more than one credential for the same user/device pair.
      */
-    for (size_t i = 0; i < MC.excludeListSize; i++) {
-        u2f_keyhandle_t excl_cred;
-        bool cred_valid;
-        ret = parse_credential_descriptor(&MC.excludeList, &excl_cred, &cred_valid);
-        if (!cred_valid || ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
-            /* Skip credentials that fail to parse. */
-            continue;
-        }
-        check_retr(ret);
-
-        uint8_t privkey[HMAC_SHA256_LEN];
-        UTIL_CLEANUP_32(privkey);
-        bool key_is_ours = u2f_keyhandle_verify(MC.rp.id, (uint8_t*)&excl_cred, sizeof(excl_cred), privkey);
-        if (key_is_ours)
-        {
-            printf1(TAG_MC, "Cred %u failed!\r\n",i);
-            return CTAP2_ERR_CREDENTIAL_EXCLUDED;
-        }
-
-        ret = cbor_value_advance(&MC.excludeList);
-        check_ret(ret);
-    }
+    ret = _verify_exclude_list(&MC);
+    check_ret(ret);
 
     /* Update the U2F counter. */
     uint32_t u2f_counter;
@@ -717,6 +753,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         /* TODO: simo: do something. */
         Abort("Failed to create new FIDO2 key.");
     }
+
     /*
      * Find where to store this key.
      * If it's new, store it in the first
@@ -772,6 +809,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
+        screen_print_debug("Stored key\n", 500);
     }
 
     /*
@@ -787,17 +825,17 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      * First comes the Authenticator Data.
      * (Note: the rpId has already been stored at the start of auth_data...)
      */
-
     auth_data.head.flags = CTAP_AUTH_DATA_FLAG_ATTESTED_CRED_DATA_INCLUDED |
         CTAP_AUTH_DATA_FLAG_USER_VERIFIED | CTAP_AUTH_DATA_FLAG_USER_PRESENT;
 
     _encode_u2f_counter(u2f_counter, (uint8_t*)&auth_data.head.signCount);
 
     device_read_aaguid(auth_data.attest.aaguid);
+ 
     /* Encode the length of the key handle in big endian. */
     uint16_t key_length = sizeof(u2f_keyhandle_t);
-    auth_data.attest.cred_len[0] = key_length & 0xFF00 >> 8;
-    auth_data.attest.cred_len[1] =  key_length & 0x00FF;
+    auth_data.attest.cred_len[0] = (key_length & 0xFF00) >> 8;
+    auth_data.attest.cred_len[1] =  (key_length & 0x00FF);
 
     printf1(TAG_GREEN, "MADE credId");
 
@@ -812,7 +850,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     #if 0
     /* TODO: simone: manage extensions */
     {
-        unsigned int ext_encoder_buf_size = sizeof(auth_data.other) - auth_data_actual_len;
+        unsigned int ext_encoder_buf_size = sizeof(auth_data.other) - actual_auth_data_len;
         uint8_t* ext_encoder_buf = auth_data.other + cose_key_len;
 
         ret = ctap_make_extensions(&MC.extensions, ext_encoder_buf, &ext_encoder_buf_size);
@@ -820,10 +858,24 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         if (ext_encoder_buf_size)
         {
             ((ctap_auth_data_t *)auth_data_buf)->head.flags |= CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED;
-            auth_data_actual_len += ext_encoder_buf_size;
+            actual_auth_data_len += ext_encoder_buf_size;
         }
     }
     #endif
+
+    /*
+     * 3 fields in an attestation object:
+     * - fmt
+     * - authData
+     * - attStmt
+     */
+    {
+        ret = cbor_encode_int(&attest_obj, RESP_fmt);
+        check_ret(ret);
+        ret = cbor_encode_text_stringz(&attest_obj, "packed");
+        check_ret(ret);
+    }
+
 
     {
         ret = cbor_encode_int(&attest_obj, RESP_authData);
@@ -832,20 +884,9 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         check_ret(ret);
     }
 
-    /*
-     * Field 2 of the attestation object is "format", describing the encoding
-     * format of the attestation statement.
-     */
-    {
-        ret = cbor_encode_int(&attest_obj,RESP_fmt);
-        check_ret(ret);
-        ret = cbor_encode_text_stringz(&attest_obj, "packed");
-        check_ret(ret);
-    }
-
     /* Compute the attestation statement. */
     uint8_t sigbuf[32];
-    bool sig_success = _calculate_signature(privkey, (uint8_t*)&auth_data, actual_auth_data_len, MC.clientDataHash, sigbuf);
+    bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, MC.clientDataHash, sigbuf);
     if (!sig_success) {
         return CTAP1_ERR_OTHER;
     }
