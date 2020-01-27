@@ -106,7 +106,7 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
                      * The option should be true/false based on whether the UV function has already
                      * been initialized.
                      */
-                    ret = cbor_encode_boolean(&options, device_is_uv_initialized());
+                    ret = cbor_encode_boolean(&options, true);
                     check_ret(ret);
                 }
 
@@ -256,28 +256,6 @@ static int _is_matching_rk(ctap_resident_key_t* rk, ctap_resident_key_t* rk2)
             (memcmp(rk->user_name, rk2->user_name, CTAP_STORAGE_USER_NAME_LIMIT) == 0);
 }
 
-static int ctap2_user_presence_test(const char* title, const char* prompt)
-{
-    device_set_status(CTAPHID_STATUS_UPNEEDED);
-    int ret = ctap_user_presence_test(title, prompt, CTAP2_UP_DELAY_MS);
-    if ( ret > 1 )
-    {
-        return CTAP2_ERR_PROCESSING;
-    }
-    else if ( ret > 0 )
-    {
-        return CTAP1_ERR_SUCCESS;
-    }
-    else if (ret < 0)
-    {
-        return CTAP2_ERR_KEEPALIVE_CANCEL;
-    }
-    else
-    {
-        return CTAP2_ERR_ACTION_TIMEOUT;
-    }
-}
-
 static bool ctap_confirm_authentication(struct rpId* rp, bool up, bool uv)
 {
     (void)up;
@@ -295,8 +273,14 @@ static bool ctap_confirm_authentication(struct rpId* rp, bool up, bool uv)
     if (prompt_size >= 100) {
         prompt_buf[99] = '\0';
     }
-    int result = ctap2_user_presence_test("FIDO2", prompt_buf);
-    return result == CTAP1_ERR_SUCCESS;
+    return workflow_confirm_with_timeout(
+        "FIDO2", prompt_buf, NULL, false, 
+        /*
+         * We don't have realtime measures, 
+         * just use a heuristic to convert ms -> #ticks
+         */
+        CTAP2_UP_DELAY_MS * 4.7
+        );
 }
 
 /**
@@ -516,6 +500,12 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
     return false;
 }
 
+static bool _ask_generic_authorization(void) {
+        return workflow_confirm_with_timeout(
+            "FIDO2", "Proceed?", NULL, false, CTAP2_UP_DELAY_MS * 4.7
+        );
+}
+
 static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
     CTAP_makeCredential MC;
     int ret;
@@ -531,7 +521,10 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * The client is asking us if we support pin
          * (and asks to check for user presence before we move on).
          */
-        check_retr(ctap2_user_presence_test("FIDO2 pin", "Pin auth"));
+        bool result = _ask_generic_authorization();
+        if (!result) {
+            return CTAP2_ERR_OPERATION_DENIED;
+        }
         /* We don't support PIN semantics. */
         return CTAP2_ERR_PIN_NOT_SET;
     }
@@ -1055,7 +1048,10 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     }
 
     if (GA.pinAuthEmpty) {
-        check_retr(ctap2_user_presence_test("FIDO2", "pinAuthEmpty"));
+        bool result = _ask_generic_authorization();
+        if (!result) {
+            return CTAP2_ERR_OPERATION_DENIED;
+        }
         return CTAP2_ERR_PIN_NOT_SET;
     }
     if (GA.pinAuthPresent) {
@@ -1181,8 +1177,6 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
         default:
             status = CTAP1_ERR_INVALID_COMMAND;
     }
-
-    device_set_status(CTAPHID_STATUS_IDLE);
 
     if (status != CTAP1_ERR_SUCCESS)
     {
