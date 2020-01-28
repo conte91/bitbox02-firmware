@@ -16,7 +16,7 @@
 #-----------------------------------------------------------------------------
 # Build bitbox lib to use in tests
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter -Wno-missing-prototypes -Wno-missing-declarations -Wno-implicit-function-declaration -Wno-bad-function-cast")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter -Wno-missing-prototypes -Wno-missing-declarations -Wno-implicit-function-declaration -Wno-bad-function-cast -Og -g")
 
 set(DBB-FILTERED-SOURCES
   ${DBB-FIRMWARE-SOURCES}
@@ -35,9 +35,17 @@ set(IGNORE_SOURCES
     )
 #f9b3ceaa91e
 
+set(IGNORE_PATHS
+    "src/workflow/impl/.*.c$"
+)
+
+
 # Exclude some files which depends on the hardware.
 foreach(SOURCEFILE ${IGNORE_SOURCES})
     list(FILTER DBB-FILTERED-SOURCES EXCLUDE REGEX ".*/${SOURCEFILE}$")
+endforeach()
+foreach(SOURCEFILE ${IGNORE_PATHS})
+    list(FILTER DBB-FILTERED-SOURCES EXCLUDE REGEX ".*/${SOURCEFILE}")
 endforeach()
 
 message("FILTERED SOURCES: ${DBB-FILTERED-SOURCES}")
@@ -67,6 +75,7 @@ add_library(bitbox
   framework/mock_leds.c
   framework/mock_delay.c
   framework/mock_bitboxbase.c
+  framework/workflow/mock_confirm.c
   framework/mock_workflow.c
   framework/workflows/workflow_status.c
   framework/btc_util.c
@@ -225,7 +234,7 @@ set(TEST_LIST
    util
    ""
    commander_set_device_name
-   "-Wl,--wrap=workflow_confirm_blocking,--wrap=memory_set_device_name"
+   "-Wl,--wrap=memory_set_device_name"
    commander_set_mnemonic_passphrase_enabled
    "-Wl,--wrap=workflow_confirm_blocking,--wrap=memory_set_mnemonic_passphrase_enabled"
    workflow_blocking

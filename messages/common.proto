@@ -34,3 +34,6 @@ message XPub {
   bytes chain_code = 4;
   bytes public_key = 5;
 }
+
+message CancelRequest {
+}

@@ -27,6 +27,7 @@
 // commander_error_code, commander_error_message are produced.
 #define COMMANDER_ERROR_TABLE                                                    \
     X(COMMANDER_OK, 0, "")                                                       \
+    X(COMMANDER_STARTED, 1, "process has started: request again later")          \
     X(COMMANDER_ERR_INVALID_INPUT, 101, "invalid input")                         \
     X(COMMANDER_ERR_MEMORY, 102, "memory")                                       \
     X(COMMANDER_ERR_GENERIC, 103, "generic error")                               \
@@ -46,5 +47,22 @@ typedef enum { COMMANDER_ERROR_TABLE } commander_error_t;
  * @param[out] out_buf Buffer to fill with the response.
  */
 void commander(const in_buffer_t* in_buf, buffer_t* out_buf);
+
+/**
+ * Invoked at every iteration of the main loop.
+ *
+ * Process the status of the HWW app.
+ */
+void commander_process(void);
+
+/**
+ * Processes a request into a response.
+ *
+ * @param request Request to process.
+ * @param response Response to fill.
+ *
+ * @return Error status.
+ */
+commander_error_t commander_process_request(Request* request, Response* response);
 
 #endif

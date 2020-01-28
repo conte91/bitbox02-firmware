@@ -15,9 +15,12 @@
 
 set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/firmware_main_loop.c
+  ${CMAKE_SOURCE_DIR}/src/commander/api/api_state.c
+  ${CMAKE_SOURCE_DIR}/src/commander/api/set_device_name.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander_btc.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander_states.c
+  ${CMAKE_SOURCE_DIR}/src/commander/commander_timeout.c
   ${CMAKE_SOURCE_DIR}/src/keystore.c
   ${CMAKE_SOURCE_DIR}/src/random.c
   ${CMAKE_SOURCE_DIR}/src/attestation.c
@@ -46,6 +49,7 @@ set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/workflow/create_seed.c
   ${CMAKE_SOURCE_DIR}/src/workflow/get_mnemonic_passphrase.c
   ${CMAKE_SOURCE_DIR}/src/workflow/idle_workflow.c
+  ${CMAKE_SOURCE_DIR}/src/workflow/impl/confirm_impl.c
   ${CMAKE_SOURCE_DIR}/src/workflow/pairing.c
   ${CMAKE_SOURCE_DIR}/src/workflow/password.c
   ${CMAKE_SOURCE_DIR}/src/workflow/password_enter.c

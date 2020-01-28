@@ -14,8 +14,8 @@
 
 #include "firmware_main_loop.h"
 
+#include "commander/commander.h"
 #include "hardfault.h"
-#include "hww.h"
 #include "touch/gestures.h"
 #include "u2f.h"
 #include "ui/screen_process.h"
@@ -49,7 +49,7 @@ void firmware_main_loop(void)
              * If USB has generated events at the application level,
              * process them now.
              */
-            hww_process();
+            commander_process();
 #if APP_U2F == 1
             u2f_process();
 #endif

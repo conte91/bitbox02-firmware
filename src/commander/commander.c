@@ -26,6 +26,7 @@
 #include "rust/rust.h"
 #endif
 
+#include <crypto/sha2/sha256.h>
 #include <flags.h>
 #include <hardfault.h>
 #include <keystore.h>
@@ -42,6 +43,7 @@
 #include <test_commander.h>
 #endif
 
+#include <ui/workflow_stack.h>
 #include <workflow/backup.h>
 #include <workflow/confirm.h>
 #include <workflow/create_seed.h>
@@ -58,6 +60,9 @@
 #include <pb_encode.h>
 
 #include <apps/btc/btc.h>
+
+#include "api/api_state.h"
+#include "commander_timeout.h"
 
 #define X(a, b, c) b,
 static const int32_t _error_code[] = {COMMANDER_ERROR_TABLE};
@@ -266,6 +271,23 @@ static commander_error_t _api_reboot(void)
     return COMMANDER_OK;
 }
 
+static void _api_cancel(void)
+{
+    switch (get_commander_api_state()->last_request) {
+    case Request_device_name_tag:
+        abort_set_device_name();
+        break;
+    default:
+        break;
+    }
+    get_commander_api_state()->request_outstanding = false;
+}
+
+void commander_abort_blocking_request(void)
+{
+    _api_cancel();
+}
+
 // ------------------------------------ Parse ------------------------------------- //
 
 /**
@@ -295,7 +317,7 @@ static commander_error_t _api_process(const Request* request, Response* response
         return _api_get_info(&(response->response.device_info));
     case Request_device_name_tag:
         response->which_response = Response_success_tag;
-        return _api_set_device_name(&(request->request.device_name));
+        return api_set_device_name(&(request->request.device_name));
     case Request_set_password_tag:
         response->which_response = Response_success_tag;
         return _api_set_password(&(request->request.set_password));
@@ -381,6 +403,81 @@ static commander_error_t _api_process(const Request* request, Response* response
     }
 }
 
+static void _api_save_status(Request* request)
+{
+    commander_api_state_t* state = get_commander_api_state();
+    state->last_request = request->which_request;
+    sha256_context_t ctx;
+    sha256_reset(&ctx);
+    noise_sha256_update(&ctx, request, sizeof(*request));
+    sha256_finish(&ctx, state->outstanding_request_hash);
+}
+
+/**
+ * Checks whether the given API request interferes
+ * with a blocking request that is currently being
+ * processed.
+ */
+static bool _api_is_blocking_request(Request* request)
+{
+    commander_api_state_t* state = get_commander_api_state();
+    if (!state->request_outstanding) {
+        return false;
+    }
+    if (request->which_request == Request_cancel_tag) {
+        return false;
+    }
+    /*
+     * A request is outstanding: the given request can
+     * go through only if it matches the outstanding request exactly.
+     */
+    if (state->last_request != request->which_request) {
+        return true;
+    }
+    uint8_t req_hash[32];
+    sha256_context_t ctx;
+    sha256_reset(&ctx);
+    noise_sha256_update(&ctx, request, sizeof(*request));
+    sha256_finish(&ctx, req_hash);
+    return memcmp(state->outstanding_request_hash, req_hash, sizeof(req_hash)) != 0;
+}
+
+commander_error_t commander_process_request(Request* request, Response* response)
+{
+    commander_api_state_t* api_state = get_commander_api_state();
+
+    commander_timeout_reset_timer();
+
+    if (!commander_states_can_call(request->which_request)) {
+        return COMMANDER_ERR_INVALID_STATE;
+    }
+    if (_api_is_blocking_request(request)) {
+        return COMMANDER_ERR_INVALID_STATE;
+    }
+    // Since we will process the call now, so can clear the 'force next' info.
+    // We do this before processing as the api call can potentially define the next api call
+    // to be forced.
+    commander_states_clear_force_next();
+
+    commander_error_t result = _api_process(request, response);
+    if (result == COMMANDER_STARTED) {
+        if (!api_state->request_outstanding) {
+            /*
+            * The API has requested to block. We need to
+            * stop accepting incoming requests other than
+            * this until either the current request is cancelled,
+            * it times out, or future retries complete the request.
+            */
+            _api_save_status(request);
+            api_state->request_outstanding = true;
+        }
+    } else {
+        api_state->request_outstanding = false;
+    }
+    util_zero(request, sizeof(*request));
+    return result;
+}
+
 /**
  * Receives and processes a command.
  */
@@ -390,19 +487,14 @@ void commander(const in_buffer_t* in_buf, buffer_t* out_buf)
 
     pb_istream_t in_stream = pb_istream_from_buffer(in_buf->data, in_buf->len);
     Request request;
+    /*
+     * Cleanup all the request, so we're sure that
+     * there is no undefined bytes in it after parsing.
+     */
+    memset(&request, 0, sizeof(request));
     commander_error_t err = _parse(&in_stream, &request);
     if (err == COMMANDER_OK) {
-        if (!commander_states_can_call(request.which_request)) {
-            err = COMMANDER_ERR_INVALID_STATE;
-        } else {
-            // Since we will process the call now, so can clear the 'force next' info.
-            // We do this before processing as the api call can potentially define the next api call
-            // to be forced.
-            commander_states_clear_force_next();
-
-            err = _api_process(&request, &response);
-            util_zero(&request, sizeof(request));
-        }
+        err = commander_process_request(&request, &response);
     }
     if (err != COMMANDER_OK) {
         _report_error(&response, err);
@@ -415,11 +507,38 @@ void commander(const in_buffer_t* in_buf, buffer_t* out_buf)
     out_buf->len = out_stream.bytes_written;
 }
 
-#ifdef TESTING
-commander_error_t commander_api_set_device_name(const SetDeviceNameRequest* request)
+size_t commander_retry_last_request(
+    const uint8_t* input,
+    const size_t in_len,
+    uint8_t* output,
+    const size_t max_out_len,
+    bool* completed)
 {
-    return _api_set_device_name(request);
+    /* No commander operation implements blocking semantics now. */
+    (void)input;
+    (void)in_len;
+    (void)output;
+    (void)max_out_len;
+    (void)completed;
+    return 0;
 }
+
+#define COMMANDER_BLOCKING_REQUEST_TIMEOUT (50)
+
+/**
+ * Called at every loop.
+ */
+void commander_process(void)
+{
+    if (!get_commander_api_state()->request_outstanding) {
+        return;
+    }
+    if (commander_timeout_get_timer() > COMMANDER_BLOCKING_REQUEST_TIMEOUT) {
+        _api_cancel();
+    }
+}
+
+#ifdef TESTING
 commander_error_t commander_api_set_mnemonic_passphrase_enabled(
     const SetMnemonicPassphraseEnabledRequest* request)
 {

@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='common.proto',
   package='',
   syntax='proto3',
-  serialized_pb=_b('\n\x0c\x63ommon.proto\"\x1a\n\x0bPubResponse\x12\x0b\n\x03pub\x18\x01 \x01(\t\"\x18\n\x16RootFingerprintRequest\".\n\x17RootFingerprintResponse\x12\x13\n\x0b\x66ingerprint\x18\x01 \x01(\x0c\"l\n\x04XPub\x12\r\n\x05\x64\x65pth\x18\x01 \x01(\x0c\x12\x1a\n\x12parent_fingerprint\x18\x02 \x01(\x0c\x12\x11\n\tchild_num\x18\x03 \x01(\r\x12\x12\n\nchain_code\x18\x04 \x01(\x0c\x12\x12\n\npublic_key\x18\x05 \x01(\x0c\x62\x06proto3')
+  serialized_pb=_b('\n\x0c\x63ommon.proto\"\x1a\n\x0bPubResponse\x12\x0b\n\x03pub\x18\x01 \x01(\t\"\x18\n\x16RootFingerprintRequest\".\n\x17RootFingerprintResponse\x12\x13\n\x0b\x66ingerprint\x18\x01 \x01(\x0c\"l\n\x04XPub\x12\r\n\x05\x64\x65pth\x18\x01 \x01(\x0c\x12\x1a\n\x12parent_fingerprint\x18\x02 \x01(\x0c\x12\x11\n\tchild_num\x18\x03 \x01(\r\x12\x12\n\nchain_code\x18\x04 \x01(\x0c\x12\x12\n\npublic_key\x18\x05 \x01(\x0c\"\x0f\n\rCancelRequestb\x06proto3')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -170,10 +170,35 @@ _XPUB = _descriptor.Descriptor(
   serialized_end=226,
 )
 
+
+_CANCELREQUEST = _descriptor.Descriptor(
+  name='CancelRequest',
+  full_name='CancelRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=228,
+  serialized_end=243,
+)
+
 DESCRIPTOR.message_types_by_name['PubResponse'] = _PUBRESPONSE
 DESCRIPTOR.message_types_by_name['RootFingerprintRequest'] = _ROOTFINGERPRINTREQUEST
 DESCRIPTOR.message_types_by_name['RootFingerprintResponse'] = _ROOTFINGERPRINTRESPONSE
 DESCRIPTOR.message_types_by_name['XPub'] = _XPUB
+DESCRIPTOR.message_types_by_name['CancelRequest'] = _CANCELREQUEST
 
 PubResponse = _reflection.GeneratedProtocolMessageType('PubResponse', (_message.Message,), dict(
   DESCRIPTOR = _PUBRESPONSE,
@@ -202,6 +227,13 @@ XPub = _reflection.GeneratedProtocolMessageType('XPub', (_message.Message,), dic
   # @@protoc_insertion_point(class_scope:XPub)
   ))
 _sym_db.RegisterMessage(XPub)
+
+CancelRequest = _reflection.GeneratedProtocolMessageType('CancelRequest', (_message.Message,), dict(
+  DESCRIPTOR = _CANCELREQUEST,
+  __module__ = 'common_pb2'
+  # @@protoc_insertion_point(class_scope:CancelRequest)
+  ))
+_sym_db.RegisterMessage(CancelRequest)
 
 
 # @@protoc_insertion_point(module_scope)

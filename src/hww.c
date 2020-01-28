@@ -258,11 +258,6 @@ void hww_abort_outstanding_op(void)
     Abort("Arbitration error, HWW should never block.");
 }
 
-void hww_process(void)
-{
-    /** Nothing to do. */
-}
-
 void hww_setup(void)
 {
     const CMD_Callback hww_cmd_callbacks[] = {{HWW_MSG, _msg}};
