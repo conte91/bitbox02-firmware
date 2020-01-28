@@ -20,6 +20,7 @@ import sys
 import base64
 import binascii
 import hashlib
+import time
 from typing import Optional, Callable, List, Dict, Tuple, Union
 from typing_extensions import TypedDict
 
@@ -41,6 +42,7 @@ except ModuleNotFoundError:
 
 HWW_CMD = 0x80 + 0x40 + 0x01
 
+ERR_OPERATION_STARTED = 1
 ERR_GENERIC = 103
 ERR_USER_ABORT = 104
 
@@ -324,9 +326,17 @@ class BitBoxCommonAPI:
         # pylint: disable=no-member
         if self.debug:
             print(request)
-        response_bytes = self._encrypted_query(request.SerializeToString())
-        response = hww.Response()
-        response.ParseFromString(response_bytes)
+        # Retry each request until we get a response that
+        # is not "retry"
+        while True:
+            response_bytes = self._encrypted_query(request.SerializeToString())
+            response = hww.Response()
+            response.ParseFromString(response_bytes)
+            if response.WhichOneof("response") != "error" or response.error.code != ERR_OPERATION_STARTED:
+                break
+            print("(Waiting for response)")
+            time.sleep(1)
+
         if response.WhichOneof("response") == "error":
             if response.error.code == ERR_USER_ABORT:
                 raise UserAbortException(response.error.code, response.error.message)

@@ -61,6 +61,7 @@ message Request {
         RestoreFromMnemonicRequest restore_from_mnemonic = 22;
         BitBoxBaseRequest bitboxbase = 23;
         RootFingerprintRequest fingerprint = 24;
+        CancelRequest cancel = 25;
     }
 }
 

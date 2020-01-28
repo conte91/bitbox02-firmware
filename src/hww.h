@@ -29,4 +29,12 @@ void hww_setup(void);
  */
 void hww_process(void);
 
+/**
+ * Function that will be invoked periodically
+ * from the timer ISR.
+ * It will keep track of how much time has passed
+ * since the last HWW packet was received.
+ */
+void hww_timeout_tick(void);
+
 #endif
