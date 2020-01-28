@@ -187,11 +187,6 @@ void hww_blocked_req_error(Packet* out_packet, const Packet* in_packet)
     out_packet->data_addr[0] = OP_STATUS_FAILURE_DEVICE_BUSY;
 }
 
-void hww_process(void)
-{
-    /* Nothing to do here. */
-}
-
 void hww_setup(void)
 {
     const CMD_Callback hww_cmd_callbacks[] = {{HWW_MSG, _msg}};

@@ -112,7 +112,12 @@ class BitBox02(BitBoxCommonAPI):
         # pylint: disable=no-member
         request = hww.Request()
         request.device_name.name = device_name
-        self._msg_query(request, expected_response="success")
+        try:
+            self._msg_query(request, expected_response="success")
+        except KeyboardInterrupt:
+            request = hww.Request()
+            request.cancel.CopyFrom(common.CancelRequest())
+            self._msg_query(request, expected_response="success")
 
     def set_password(self) -> bool:
         """

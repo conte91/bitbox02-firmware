@@ -67,6 +67,15 @@ void workflow_stack_stop_workflow(void)
     workflow->cleanup(workflow);
 }
 
+void workflow_stack_kill_workflow(void)
+{
+    workflow_t* workflow = _workflow_stack_pop();
+    if (workflow->kill) {
+        workflow->kill(workflow);
+    }
+    workflow->cleanup(workflow);
+}
+
 void workflow_stack_clear(void)
 {
     while (_workflow_stack.size > 0) {

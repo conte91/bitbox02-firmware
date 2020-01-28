@@ -25,6 +25,7 @@
 #include "usb_processing.h"
 
 #ifndef TESTING
+#include <commander/commander.h>
 #include <hal_timer.h>
 #include <u2f/u2f_packet.h>
 #include <usb/usb_packet.h>
@@ -70,11 +71,19 @@ static void _u2f_endpoint_available(void)
 #endif
 #endif
 
-#if !defined(TESTING) && APP_U2F == 1
+#if !defined(TESTING)
+/**
+ * Callback that will be invoked
+ * every time TIMER_0 fires.
+ *
+ * We store here the amount of time that has elapsed since the last USB
+ * packet was received.
+ */
 static void _timeout_cb(const struct timer_task* const timer_task)
 {
     (void)timer_task;
     u2f_packet_timeout_tick();
+    commander_timeout_tick();
 }
 #endif
 
