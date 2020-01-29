@@ -15,9 +15,12 @@
 
 set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/firmware_main_loop.c
+  ${CMAKE_SOURCE_DIR}/src/commander/api/api_state.c
+  ${CMAKE_SOURCE_DIR}/src/commander/api/set_device_name.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander_btc.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander_states.c
+  ${CMAKE_SOURCE_DIR}/src/commander/commander_timeout.c
   ${CMAKE_SOURCE_DIR}/src/keystore.c
   ${CMAKE_SOURCE_DIR}/src/random.c
   ${CMAKE_SOURCE_DIR}/src/attestation.c

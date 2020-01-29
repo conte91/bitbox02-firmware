@@ -26,6 +26,7 @@
 
 #ifndef TESTING
 #include <commander/commander.h>
+#include <commander/commander_timeout.h>
 #include <hal_timer.h>
 #include <u2f/u2f_packet.h>
 #include <usb/usb_packet.h>

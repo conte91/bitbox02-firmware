@@ -49,6 +49,4 @@ size_t commander(const uint8_t* input, size_t in_len, uint8_t* output, size_t ma
  */
 void commander_process(void);
 
-void commander_timeout_tick(void);
-
 #endif
