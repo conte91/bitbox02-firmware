@@ -58,6 +58,9 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#include "api/api_state.h"
+#include "commander_timeout.h"
+
 #define X(a, b, c) b,
 static const int32_t _error_code[] = {COMMANDER_ERROR_TABLE};
 #undef X
@@ -72,20 +75,6 @@ static void _report_error(Response* response, commander_error_t error_code)
     error->code = _error_code[error_code];
     snprintf(error->message, sizeof(error->message), "%s", _error_message[error_code]);
     response->which_response = Response_error_tag;
-}
-
-#define COMMANDER_TIMER_MAX ((uint16_t)-1)
-
-/**
- * Contains the timer ticks elapsed
- * since the last time a valid USB packet was received.
- */
-static uint16_t _ticks_since_last_packet;
-
-void commander_timeout_tick(void) {
-    if (_ticks_since_last_packet != COMMANDER_TIMER_MAX) {
-        _ticks_since_last_packet++;
-    }
 }
 
 // ------------------------------------ API ------------------------------------- //
@@ -134,112 +123,6 @@ static commander_error_t _api_get_info(DeviceInfoResponse* device_info)
     }
 #endif
     return COMMANDER_OK;
-}
-
-typedef enum {
-    /** No operation is in progress */
-    COMMANDER_STATUS_IDLE,
-    /** We're asking for confirmation for setting the device name. */
-    COMMANDER_STATUS_SET_NAME
-} commander_status_t;
-
-/**
- * Data needed for the "set device name" workflow.
- */
-typedef struct {
-    char* name;
-    enum {
-        COMMANDER_SET_DEV_NAME_STARTED,
-        COMMANDER_SET_DEV_NAME_CONFIRMED,
-        COMMANDER_SET_DEV_NAME_REPLY_READY
-    } state;
-    /* Confirmation result */
-    bool result;
-    commander_error_t reply;
-} _device_name_data_t;
-
-typedef struct {
-    union {
-        _device_name_data_t dev_name;
-    } data;
-    commander_status_t status;
-} commander_state_t;
-
-commander_state_t _commander_state;
-
-static void _commander_cleanup_set_dev_name(void) {
-    free(_commander_state.data.dev_name.name);
-    _commander_state.status = COMMANDER_STATUS_IDLE;
-}
-
-#define SET_DEVICE_NAME_TIMEOUT (50)
-
-static void _set_device_name_done(workflow_confirm_result_t result, void* param)
-{
-    (void)param;
-    if (result == WORKFLOW_CONFIRM_ABORTED) {
-        /* Kill everything. Don't expect another response in the future. */
-        /* TODO ??? */
-        _commander_cleanup_set_dev_name();
-        return;
-    }
-    _commander_state.data.dev_name.state = COMMANDER_SET_DEV_NAME_CONFIRMED;
-    _commander_state.data.dev_name.result = (result == WORKFLOW_CONFIRM_CONFIRMED);
-    free(_commander_state.data.dev_name.name);
-}
-
-static void _abort_set_device_name(void)
-{
-    /* Destroy this workflow. */
-    workflow_stack_stop_workflow();
-    _commander_cleanup_set_dev_name();
-}
-
-/**
- * Called at every loop, when we are asking the user to confirm
- * the device name.
- */
-static void _process_set_device_name(void) {
-    _device_name_data_t* data = &_commander_state.data.dev_name;
-    if (data->state == COMMANDER_SET_DEV_NAME_CONFIRMED) {
-        if (data->result) {
-            if (!memory_set_device_name(data->name)) {
-                data->reply = COMMANDER_ERR_MEMORY;
-            } else {
-                data->reply = COMMANDER_OK;
-            }
-        } else {
-            data->reply = COMMANDER_ERR_USER_ABORT;
-        }
-        data->state = COMMANDER_SET_DEV_NAME_REPLY_READY;
-    }
-    if (_ticks_since_last_packet > SET_DEVICE_NAME_TIMEOUT) {
-        _abort_set_device_name();
-    }
-}
-
-static commander_error_t _api_set_device_name(const SetDeviceNameRequest* request)
-{
-    if (_commander_state.status == COMMANDER_STATUS_SET_NAME) {
-        if (_commander_state.data.dev_name.state == COMMANDER_SET_DEV_NAME_REPLY_READY) {
-            _commander_cleanup_set_dev_name();
-            return _commander_state.data.dev_name.reply;
-        }
-        return COMMANDER_STARTED;
-    } else if (_commander_state.status == COMMANDER_STATUS_IDLE) {
-        _commander_state.status = COMMANDER_STATUS_SET_NAME;
-        _commander_state.data.dev_name.name = strdup(request->name);
-        if (!_commander_state.data.dev_name.name) {
-            return COMMANDER_ERR_MEMORY;
-        }
-        _commander_state.data.dev_name.state = COMMANDER_SET_DEV_NAME_STARTED;
-        workflow_stack_start_workflow(
-            workflow_confirm_scrollable("Name", _commander_state.data.dev_name.name, NULL, false, _set_device_name_done, NULL)
-        );
-        return COMMANDER_STARTED;
-    }
-    /* We're doing something already... */
-    return COMMANDER_ERR_INVALID_STATE;
 }
 
 static commander_error_t _api_set_password(const SetPasswordRequest* request)
@@ -356,9 +239,9 @@ static commander_error_t _api_reboot(void)
 
 static void _api_cancel(void)
 {
-    switch(_commander_state.status) {
+    switch(get_commander_api_state()->status) {
         case COMMANDER_STATUS_SET_NAME:
-            _abort_set_device_name();
+            abort_set_device_name();
             break;
         case COMMANDER_STATUS_IDLE:
             break;
@@ -396,7 +279,7 @@ static commander_error_t _api_process(const Request* request, Response* response
         return _api_get_info(&(response->response.device_info));
     case Request_device_name_tag:
         response->which_response = Response_success_tag;
-        return _api_set_device_name(&(request->request.device_name));
+        return api_set_device_name(&(request->request.device_name));
     case Request_set_password_tag:
         response->which_response = Response_success_tag;
         return _api_set_password(&(request->request.set_password));
@@ -494,7 +377,7 @@ size_t commander(
     Request request;
     commander_error_t err = _parse(&in_stream, &request);
     if (err == COMMANDER_OK) {
-        _ticks_since_last_packet = 0;
+        commander_timeout_reset_timer();
         if (!commander_states_can_call(request.which_request)) {
             err = COMMANDER_ERR_INVALID_STATE;
         } else {
@@ -520,9 +403,9 @@ size_t commander(
 
 void commander_process(void)
 {
-    switch(_commander_state.status) {
+    switch(get_commander_api_state()->status) {
         case COMMANDER_STATUS_SET_NAME:
-            _process_set_device_name();
+            process_set_device_name();
             break;
         case COMMANDER_STATUS_IDLE:
             break;
@@ -535,7 +418,7 @@ void commander_process(void)
 #ifdef TESTING
 commander_error_t commander_api_set_device_name(const SetDeviceNameRequest* request)
 {
-    return _api_set_device_name(request);
+    return api_set_device_name(request);
 }
 commander_error_t commander_api_set_mnemonic_passphrase_enabled(
     const SetMnemonicPassphraseEnabledRequest* request)
