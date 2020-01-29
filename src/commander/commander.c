@@ -243,6 +243,8 @@ static void _api_cancel(void)
     switch (get_commander_api_state()->last_request) {
     case Request_device_name_tag:
         abort_set_device_name();
+    case Request_btc_pub_tag:
+        abort_btc_pub();
         break;
     default:
         break;

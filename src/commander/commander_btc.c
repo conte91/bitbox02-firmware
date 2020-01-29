@@ -21,104 +21,7 @@
 #include <apps/btc/btc_sign.h>
 #include <workflow/verify_pub.h>
 
-#include <wally_bip32.h> // for BIP32_INITIAL_HARDENED_CHILD
-
-static const char* _coin_btc = "Bitcoin";
-static const char* _coin_tbtc = "BTC Testnet";
-static const char* _coin_ltc = "Litecoin";
-static const char* _coin_tltc = "LTC Testnet";
-
-// Returns the string to be used in the confirm title. Returns NULL for an invalid coin.
-static const char* _coin_title(BTCCoin coin)
-{
-    switch (coin) {
-    case BTCCoin_BTC:
-        return _coin_btc;
-    case BTCCoin_TBTC:
-        return _coin_tbtc;
-    case BTCCoin_LTC:
-        return _coin_ltc;
-    case BTCCoin_TLTC:
-        return _coin_tltc;
-    default:
-        return NULL;
-    }
-}
-
-static commander_error_t _btc_pub_xpub(const BTCPubRequest* request, PubResponse* response)
-{
-    if (!app_btc_xpub(
-            request->coin,
-            request->output.xpub_type,
-            request->keypath,
-            request->keypath_count,
-            response->pub,
-            sizeof(response->pub))) {
-        return COMMANDER_ERR_GENERIC;
-    }
-    if (request->display) {
-        const char* coin = _coin_title(request->coin);
-        if (coin == NULL) {
-            return COMMANDER_ERR_GENERIC;
-        }
-        char title[100] = {0};
-        switch (request->output.xpub_type) {
-        case BTCPubRequest_XPubType_TPUB:
-        case BTCPubRequest_XPubType_XPUB:
-        case BTCPubRequest_XPubType_YPUB:
-        case BTCPubRequest_XPubType_ZPUB:
-        case BTCPubRequest_XPubType_VPUB:
-        case BTCPubRequest_XPubType_UPUB:
-        case BTCPubRequest_XPubType_CAPITAL_VPUB:
-        case BTCPubRequest_XPubType_CAPITAL_ZPUB:
-            snprintf(
-                title,
-                sizeof(title),
-                "%s\naccount #%lu",
-                coin,
-                (unsigned long)request->keypath[2] - BIP32_INITIAL_HARDENED_CHILD + 1);
-            break;
-        default:
-            return COMMANDER_ERR_GENERIC;
-        }
-        workflow_verify_pub(title, response->pub);
-    }
-    return COMMANDER_OK;
-}
-
-static commander_error_t _btc_pub_address_simple(
-    const BTCPubRequest* request,
-    PubResponse* response)
-{
-    if (!app_btc_address_simple(
-            request->coin,
-            request->output.script_config.config.simple_type,
-            request->keypath,
-            request->keypath_count,
-            response->pub,
-            sizeof(response->pub))) {
-        return COMMANDER_ERR_GENERIC;
-    }
-    if (request->display) {
-        const char* coin = _coin_title(request->coin);
-        if (coin == NULL) {
-            return COMMANDER_ERR_GENERIC;
-        }
-        char title[100] = {0};
-        switch (request->output.script_config.config.simple_type) {
-        case BTCScriptConfig_SimpleType_P2WPKH_P2SH:
-            snprintf(title, sizeof(title), "%s", coin);
-            break;
-        case BTCScriptConfig_SimpleType_P2WPKH:
-            snprintf(title, sizeof(title), "%s\nbech32", coin);
-            break;
-        default:
-            return COMMANDER_ERR_GENERIC;
-        }
-        workflow_verify_pub(title, response->pub);
-    }
-    return COMMANDER_OK;
-}
+#include "api/btc_pub.h"
 
 commander_error_t commander_btc_pub(const BTCPubRequest* request, PubResponse* response)
 {
@@ -127,11 +30,11 @@ commander_error_t commander_btc_pub(const BTCPubRequest* request, PubResponse* r
     }
     switch (request->which_output) {
     case BTCPubRequest_xpub_type_tag:
-        return _btc_pub_xpub(request, response);
+        return btc_pub_xpub(request, response);
     case BTCPubRequest_script_config_tag:
         switch (request->output.script_config.which_config) {
         case BTCScriptConfig_simple_type_tag:
-            return _btc_pub_address_simple(request, response);
+            return btc_pub_address_simple(request, response);
         default:
             return COMMANDER_ERR_INVALID_INPUT;
         }

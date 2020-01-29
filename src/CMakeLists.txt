@@ -16,6 +16,7 @@
 set(DBB-FIRMWARE-SOURCES
   ${CMAKE_SOURCE_DIR}/src/firmware_main_loop.c
   ${CMAKE_SOURCE_DIR}/src/commander/api/api_state.c
+  ${CMAKE_SOURCE_DIR}/src/commander/api/btc_pub.c
   ${CMAKE_SOURCE_DIR}/src/commander/api/set_device_name.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander.c
   ${CMAKE_SOURCE_DIR}/src/commander/commander_btc.c
@@ -412,6 +413,7 @@ if(CMAKE_CROSSCOMPILING)
     target_compile_definitions(${elf} PRIVATE BOOTLOADER "APP_BTC=0" "APP_LTC=0" "APP_ETH=0" "APP_U2F=0")
     # needed to find version.h
     target_include_directories(${elf} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_include_directories(${elf} SYSTEM PRIVATE ${NANOPB_INCLUDE_DIRS})
     # needed to find bootloader_version.h
     target_include_directories(${elf} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/bootloader)
     target_link_libraries(${elf} PRIVATE "-Wl,-Map=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${bootloader}.map\" -T\"${CMAKE_SOURCE_DIR}/bootloader.ld\"")

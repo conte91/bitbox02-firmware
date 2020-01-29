@@ -232,7 +232,13 @@ class BitBox02(BitBoxCommonAPI):
         request.btc_pub.CopyFrom(
             btc.BTCPubRequest(coin=coin, keypath=keypath, xpub_type=xpub_type, display=display)
         )
-        return self._msg_query(request).pub.pub
+        try:
+            return self._msg_query(request, expected_response="success").pub.pub
+        except KeyboardInterrupt:
+            request = hww.Request()
+            request.cancel.CopyFrom(common.CancelRequest())
+            self._msg_query(request, expected_response="success")
+            return None
 
     def btc_address(
         self,
@@ -254,7 +260,13 @@ class BitBox02(BitBoxCommonAPI):
                 coin=coin, keypath=keypath, script_config=script_config, display=display
             )
         )
-        return self._msg_query(request).pub.pub
+        try:
+            return self._msg_query(request).pub.pub
+        except KeyboardInterrupt:
+            request = hww.Request()
+            request.cancel.CopyFrom(common.CancelRequest())
+            self._msg_query(request, expected_response="success")
+            return None
 
     # pylint: disable=too-many-arguments
     def btc_sign(

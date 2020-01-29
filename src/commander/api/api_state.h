@@ -2,6 +2,7 @@
 #define _API_STATE_H
 
 #include "../commander.h"
+#include "btc_pub.h"
 #include "set_device_name.h"
 
 #include <crypto/sha2/sha256.h>
