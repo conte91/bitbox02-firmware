@@ -17,6 +17,7 @@
 #include "async.h"
 #include "blocking.h"
 #include "hardfault.h"
+#include "impl/confirm_impl.h"
 
 #include <hardfault.h>
 #include <ui/components/confirm.h>
@@ -28,104 +29,6 @@
 #include <stdlib.h>
 
 #define NO_TIMEOUT ((uint32_t)-1)
-
-typedef struct {
-    bool result;
-    bool done;
-    uint32_t timeout_counter;
-    uint32_t timeout;
-    const char* title;
-    const char* body;
-    bool scrollable;
-    bool longtouch;
-    bool accept_only;
-    void (*callback)(bool, void*);
-    void* callback_param;
-    const UG_FONT* font;
-} data_t;
-
-static void _confirm(void* param)
-{
-    workflow_t* self = (workflow_t*)param;
-    data_t* data = (data_t*)self->data;
-    data->result = true;
-    data->done = true;
-}
-
-static void _reject(void* param)
-{
-    workflow_t* self = (workflow_t*)param;
-    data_t* data = (data_t*)self->data;
-    data->result = false;
-    data->done = true;
-}
-
-/**
- * Checks if the user has confirmed the choice,
- * or if the timeout (optional) has expired.
- */
-static void _workflow_confirm_spin(workflow_t* self)
-{
-    data_t* data = (data_t*)self->data;
-    if (data->done) {
-        /* Publish our result. */
-        data->callback(data->result, data->callback_param);
-        /* Time to go, goodbye. */
-        workflow_stack_stop_workflow();
-    } else if (data->timeout != NO_TIMEOUT) {
-        if (data->timeout_counter == data->timeout) {
-            /* Timeout has expired. Report a failure. */
-            data->callback(false, data->callback_param);
-            workflow_stack_stop_workflow();
-        } else {
-            data->timeout_counter++;
-        }
-    }
-}
-
-/**
- * Starts this workflow.
- */
-static void _workflow_confirm_init(workflow_t* self)
-{
-    data_t* data = (data_t*)self->data;
-    component_t* comp;
-    if (data->scrollable) {
-        comp = confirm_create_scrollable(
-            data->title,
-            data->body,
-            data->font,
-            false,
-            _confirm,
-            self,
-            data->accept_only ? NULL : _reject,
-            self);
-    } else {
-        comp = confirm_create(
-            data->title,
-            data->body,
-            data->font,
-            data->longtouch,
-            _confirm,
-            self,
-            data->accept_only ? NULL : _reject,
-            self);
-    }
-    ui_screen_stack_push(comp);
-}
-
-/**
- * Destroys this workflow.
- */
-static void _workflow_confirm_cleanup(workflow_t* self)
-{
-    ui_screen_stack_pop();
-    ui_screen_stack_cleanup();
-    util_zero(self->data, sizeof(data_t));
-    free(self->data);
-    util_zero(self, sizeof(*self));
-    free(self);
-}
 
 static workflow_t* _workflow_confirm_common(
     const char* title,
@@ -139,8 +42,8 @@ static workflow_t* _workflow_confirm_common(
     void* callback_param)
 {
     workflow_t* result = workflow_allocate(
-        _workflow_confirm_init, _workflow_confirm_cleanup, _workflow_confirm_spin);
-    data_t* data = malloc(sizeof(*data));
+        workflow_confirm_impl_init, workflow_confirm_impl_cleanup, workflow_confirm_impl_spin);
+    workflow_confirm_data_t* data = malloc(sizeof(*data));
     if (!data) {
         Abort("workflow_confirm\ndata malloc");
     }

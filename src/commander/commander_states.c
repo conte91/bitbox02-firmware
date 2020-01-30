@@ -24,17 +24,15 @@ static commander_states_endpoint_id _force_next = 0;
 // api commands the host can invoke regardless of which of the three main states we are in.
 // Exception applies if one of the api endpoints forces subsequent calls, see
 // `commander_states_force_next()`.
-static commander_states_endpoint_id _commands_anytime[] = {
-    Request_device_info_tag,
-    Request_reboot_tag,
-    Request_device_name_tag,
-    Request_device_language_tag,
-    Request_check_sdcard_tag,
-    Request_insert_remove_sdcard_tag,
-    Request_list_backups_tag,
-    Request_bitboxbase_tag,
-    Request_cancel_tag
-};
+static commander_states_endpoint_id _commands_anytime[] = {Request_device_info_tag,
+                                                           Request_reboot_tag,
+                                                           Request_device_name_tag,
+                                                           Request_device_language_tag,
+                                                           Request_check_sdcard_tag,
+                                                           Request_insert_remove_sdcard_tag,
+                                                           Request_list_backups_tag,
+                                                           Request_bitboxbase_tag,
+                                                           Request_cancel_tag};
 
 // api commands the host can invoke when the device is uninitialized.
 static commander_states_endpoint_id _commands_uninitialized[] = {

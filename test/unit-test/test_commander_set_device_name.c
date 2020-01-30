@@ -18,41 +18,45 @@
 #include <cmocka.h>
 
 #include <test_commander.h>
+#include <ui/workflow_stack.h>
+#include <workflow/workflow.h>
 
-bool __wrap_workflow_confirm_scrollable_blocking(
-    const char* title,
-    const char* body,
-    bool accept_only)
-{
-    check_expected(title);
-    check_expected(body);
-    check_expected(accept_only);
-    return mock();
-}
-
-static void _test_api_set_device_name(void** state)
+static void _run_set_device_name(
+    bool memory_success,
+    bool user_accepts,
+    commander_error_t expected_result)
 {
     static SetDeviceNameRequest request = {
         .name = "Mia",
     };
+    /* Start the first request. */
+    assert_int_equal(COMMANDER_STARTED, commander_api_set_device_name(&request));
 
-    expect_string_count(__wrap_workflow_confirm_scrollable_blocking, title, "Name", -1);
-    expect_string_count(__wrap_workflow_confirm_scrollable_blocking, body, request.name, -1);
-    expect_value_count(__wrap_workflow_confirm_scrollable_blocking, accept_only, false, -1);
+    /* Now make something happen in the UI */
+    if (user_accepts) {
+        will_return(__wrap_memory_set_device_name, memory_success);
+    }
+    will_return(workflow_confirm_impl_spin, true);
+    will_return(workflow_confirm_impl_spin, user_accepts);
 
+    workflow_t* workflow = workflow_stack_top();
+    assert_non_null(workflow);
+    workflow->spin(workflow);
+
+    /* Repeat the request. This time it should yield a result. */
+    assert_int_equal(expected_result, commander_api_set_device_name(&request));
+}
+
+static void _test_api_set_device_name(void** state)
+{
     // All A-Okay.
-    will_return(__wrap_workflow_confirm_scrollable_blocking, true);
-    will_return(__wrap_memory_set_device_name, true);
-    assert_int_equal(COMMANDER_OK, commander_api_set_device_name(&request));
+    _run_set_device_name(true, true, COMMANDER_OK);
 
     // User rejects.
-    will_return(__wrap_workflow_confirm_scrollable_blocking, false);
-    assert_int_equal(COMMANDER_ERR_USER_ABORT, commander_api_set_device_name(&request));
+    _run_set_device_name(true, false, COMMANDER_ERR_USER_ABORT);
 
     // Setting name fails.
-    will_return(__wrap_workflow_confirm_scrollable_blocking, true);
-    will_return(__wrap_memory_set_device_name, false);
-    assert_int_equal(COMMANDER_ERR_MEMORY, commander_api_set_device_name(&request));
+    _run_set_device_name(false, true, COMMANDER_ERR_MEMORY);
 }
 
 int main(void)
