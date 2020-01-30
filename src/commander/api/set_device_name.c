@@ -3,31 +3,30 @@
 #include <stdlib.h>
 
 #include <memory/memory.h>
-#include <workflow/confirm.h>
 #include <ui/workflow_stack.h>
+#include <workflow/confirm.h>
 
-#include "api_state.h"
 #include "../commander_timeout.h"
+#include "api_state.h"
 
-static void _commander_cleanup_set_dev_name(void) {
+static void _commander_cleanup_set_dev_name(void)
+{
     free(get_commander_api_state()->data.dev_name.name);
     get_commander_api_state()->status = COMMANDER_STATUS_IDLE;
 }
 
 #define SET_DEVICE_NAME_TIMEOUT (50)
 
-static void _set_device_name_done(workflow_confirm_result_t result, void* param)
+static void _set_device_name_done(bool result, void* param)
 {
     (void)param;
-    if (result == WORKFLOW_CONFIRM_ABORTED) {
-        /* Kill everything. Don't expect another response in the future. */
-        /* TODO ??? */
-        _commander_cleanup_set_dev_name();
-        return;
+
+    device_name_data_t* data = &get_commander_api_state()->data.dev_name;
+    if (result) {
+        data->state = COMMANDER_SET_DEV_NAME_CONFIRMED;
+    } else {
+        data->state = COMMANDER_SET_DEV_NAME_ABORTED;
     }
-    get_commander_api_state()->data.dev_name.state = COMMANDER_SET_DEV_NAME_CONFIRMED;
-    get_commander_api_state()->data.dev_name.result = (result == WORKFLOW_CONFIRM_CONFIRMED);
-    free(get_commander_api_state()->data.dev_name.name);
 }
 
 void abort_set_device_name(void)
@@ -36,25 +35,13 @@ void abort_set_device_name(void)
     workflow_stack_stop_workflow();
     _commander_cleanup_set_dev_name();
 }
+
 /**
  * Called at every loop, when we are asking the user to confirm
  * the device name.
  */
 void process_set_device_name(void)
 {
-    device_name_data_t* data = &get_commander_api_state()->data.dev_name;
-    if (data->state == COMMANDER_SET_DEV_NAME_CONFIRMED) {
-        if (data->result) {
-            if (!memory_set_device_name(data->name)) {
-                data->reply = COMMANDER_ERR_MEMORY;
-            } else {
-                data->reply = COMMANDER_OK;
-            }
-        } else {
-            data->reply = COMMANDER_ERR_USER_ABORT;
-        }
-        data->state = COMMANDER_SET_DEV_NAME_REPLY_READY;
-    }
     if (commander_timeout_get_timer() > SET_DEVICE_NAME_TIMEOUT) {
         abort_set_device_name();
     }
@@ -62,29 +49,38 @@ void process_set_device_name(void)
 
 commander_error_t api_set_device_name(const SetDeviceNameRequest* request)
 {
-    if (get_commander_api_state()->status == COMMANDER_STATUS_SET_NAME) {
-        if (get_commander_api_state()->data.dev_name.state == COMMANDER_SET_DEV_NAME_REPLY_READY) {
+    commander_api_state_t* state = get_commander_api_state();
+    if (state->status == COMMANDER_STATUS_SET_NAME) {
+        device_name_data_t* data = &state->data.dev_name;
+        commander_error_t result = COMMANDER_STARTED;
+        if (data->state == COMMANDER_SET_DEV_NAME_CONFIRMED) {
+            if (!memory_set_device_name(data->name)) {
+                result = COMMANDER_ERR_MEMORY;
+            } else {
+                result = COMMANDER_OK;
+            }
             _commander_cleanup_set_dev_name();
-            return get_commander_api_state()->data.dev_name.reply;
+        } else if (data->state == COMMANDER_SET_DEV_NAME_ABORTED) {
+            _commander_cleanup_set_dev_name();
+            result = COMMANDER_ERR_USER_ABORT;
         }
-        return COMMANDER_STARTED;
-    } else if (get_commander_api_state()->status == COMMANDER_STATUS_IDLE) {
-        get_commander_api_state()->status = COMMANDER_STATUS_SET_NAME;
-        get_commander_api_state()->data.dev_name.name = strdup(request->name);
-        if (!get_commander_api_state()->data.dev_name.name) {
+        return result;
+    } else if (state->status == COMMANDER_STATUS_IDLE) {
+        state->status = COMMANDER_STATUS_SET_NAME;
+        state->data.dev_name.name = strdup(request->name);
+        if (!state->data.dev_name.name) {
             return COMMANDER_ERR_MEMORY;
         }
-        get_commander_api_state()->data.dev_name.state = COMMANDER_SET_DEV_NAME_STARTED;
+        state->data.dev_name.state = COMMANDER_SET_DEV_NAME_STARTED;
         const confirm_params_t params = {
             .title = "Name",
-            .body = get_commander_api_state()->data.dev_name.name,
+            .body = state->data.dev_name.name,
             .scrollable = true,
         };
-        workflow_stack_start_workflow(
-            workflow_confirm(&params, _set_device_name_done, NULL)
-        );
+        workflow_stack_start_workflow(workflow_confirm(
+            &params, _set_device_name_done, NULL));
         return COMMANDER_STARTED;
-    } 
+    }
     /* We're doing something already... */
     return COMMANDER_ERR_INVALID_STATE;
 }

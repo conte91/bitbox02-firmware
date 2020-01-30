@@ -17,6 +17,7 @@
 #include "async.h"
 #include "blocking.h"
 #include "hardfault.h"
+#include "impl/confirm_impl.h"
 
 #include <hardfault.h>
 #include <ui/components/confirm.h>
@@ -27,77 +28,14 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-typedef struct {
-    bool result;
-    bool done;
-    confirm_params_t params;
-    void (*callback)(bool, void*);
-    void* callback_param;
-} data_t;
-
-static void _confirm(void* param)
-{
-    workflow_t* self = (workflow_t*)param;
-    data_t* data = (data_t*)self->data;
-    data->result = true;
-    data->done = true;
-}
-
-static void _reject(void* param)
-{
-    workflow_t* self = (workflow_t*)param;
-    data_t* data = (data_t*)self->data;
-    data->result = false;
-    data->done = true;
-}
-
-/**
- * Checks if the user has confirmed the choice.
- */
-static void _workflow_confirm_spin(workflow_t* self)
-{
-    data_t* data = (data_t*)self->data;
-    if (data->done) {
-        /* Publish our result. */
-        data->callback(data->result, data->callback_param);
-        /* Time to go, goodbye. */
-        workflow_stack_stop_workflow();
-    }
-}
-
-/**
- * Starts this workflow.
- */
-static void _workflow_confirm_init(workflow_t* self)
-{
-    data_t* data = (data_t*)self->data;
-    component_t* comp;
-    comp = confirm_create(
-        &data->params, _confirm, self, data->params.accept_only ? NULL : _reject, self);
-    ui_screen_stack_push(comp);
-}
-
-/**
- * Destroys this workflow.
- */
-static void _workflow_confirm_cleanup(workflow_t* self)
-{
-    ui_screen_stack_pop();
-    ui_screen_stack_cleanup();
-    util_zero(self->data, sizeof(data_t));
-    free(self->data);
-    util_zero(self, sizeof(*self));
-    free(self);
-}
-
 workflow_t* workflow_confirm(
     const confirm_params_t* params,
     void (*callback)(bool, void*),
     void* callback_param)
 {
     workflow_t* result = workflow_allocate(
-        _workflow_confirm_init, _workflow_confirm_cleanup, _workflow_confirm_spin);
-    data_t* data = malloc(sizeof(*data));
+        workflow_confirm_impl_init, workflow_confirm_impl_cleanup, workflow_confirm_impl_spin);
+    workflow_confirm_data_t* data = malloc(sizeof(*data));
     if (!data) {
         Abort("workflow_confirm\ndata malloc");
     }

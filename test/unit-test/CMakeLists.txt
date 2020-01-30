@@ -35,9 +35,17 @@ set(IGNORE_SOURCES
     )
 #f9b3ceaa91e
 
+set(IGNORE_PATHS
+    "src/workflow/impl/.*.c$"
+)
+
+
 # Exclude some files which depends on the hardware.
 foreach(SOURCEFILE ${IGNORE_SOURCES})
     list(FILTER DBB-FILTERED-SOURCES EXCLUDE REGEX ".*/${SOURCEFILE}$")
+endforeach()
+foreach(SOURCEFILE ${IGNORE_PATHS})
+    list(FILTER DBB-FILTERED-SOURCES EXCLUDE REGEX ".*/${SOURCEFILE}")
 endforeach()
 
 message("FILTERED SOURCES: ${DBB-FILTERED-SOURCES}")
@@ -61,6 +69,7 @@ add_library(bitbox
   framework/mock_sd.c
   framework/mock_smarteeprom.c
   framework/mock_securechip.c
+  framework/workflow/impl/confirm_impl.c
   framework/btc_util.c
 )
 
@@ -205,7 +214,7 @@ set(TEST_LIST
    util
    ""
    commander_set_device_name
-   "-Wl,--wrap=workflow_confirm_blocking,--wrap=memory_set_device_name"
+   "-Wl,--wrap=memory_set_device_name"
    commander_set_mnemonic_passphrase_enabled
    "-Wl,--wrap=workflow_confirm_blocking,--wrap=memory_set_mnemonic_passphrase_enabled"
    workflow_blocking

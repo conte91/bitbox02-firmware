@@ -25,7 +25,9 @@
 #include "usb_processing.h"
 
 #ifndef TESTING
+#ifndef BOOTLOADER
 #include <commander/commander.h>
+#endif
 #include <commander/commander_timeout.h>
 #include <hal_timer.h>
 #include <u2f/u2f_packet.h>
@@ -72,7 +74,7 @@ static void _u2f_endpoint_available(void)
 #endif
 #endif
 
-#if !defined(TESTING)
+#if !defined(TESTING) && !defined(BOOTLOADER)
 /**
  * Callback that will be invoked
  * every time TIMER_0 fires.
@@ -92,7 +94,7 @@ static bool _usb_enabled = false;
 
 int32_t usb_start(void (*on_hww_init)(void))
 {
-#if !defined(TESTING) && APP_U2F == 1
+#if !defined(TESTING) && !defined(BOOTLOADER)
     static struct timer_task Timer_task;
     Timer_task.interval = TIMEOUT_TICK_PERIOD_MS;
     Timer_task.cb = _timeout_cb;

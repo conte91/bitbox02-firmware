@@ -241,18 +241,20 @@ static commander_error_t _api_reboot(void)
     return COMMANDER_OK;
 }
 
+#if PLATFORM_BITBOX02 == 1
 static void _api_cancel(void)
 {
-    switch(get_commander_api_state()->status) {
-        case COMMANDER_STATUS_SET_NAME:
-            abort_set_device_name();
-            break;
-        case COMMANDER_STATUS_IDLE:
-            break;
-        default:
-            Abort("Impossible HWW process status\n");
+    switch (get_commander_api_state()->status) {
+    case COMMANDER_STATUS_SET_NAME:
+        abort_set_device_name();
+        break;
+    case COMMANDER_STATUS_IDLE:
+        break;
+    default:
+        Abort("Impossible HWW process status\n");
     }
 }
+#endif
 
 // ------------------------------------ Parse ------------------------------------- //
 
@@ -406,17 +408,16 @@ size_t commander(
 
 void commander_process(void)
 {
-    switch(get_commander_api_state()->status) {
-        case COMMANDER_STATUS_SET_NAME:
-            process_set_device_name();
-            break;
-        case COMMANDER_STATUS_IDLE:
-            break;
-        default:
-            Abort("Impossible HWW process status\n");
+    switch (get_commander_api_state()->status) {
+    case COMMANDER_STATUS_SET_NAME:
+        process_set_device_name();
+        break;
+    case COMMANDER_STATUS_IDLE:
+        break;
+    default:
+        Abort("Impossible HWW process status\n");
     }
 }
-
 
 #ifdef TESTING
 commander_error_t commander_api_set_device_name(const SetDeviceNameRequest* request)

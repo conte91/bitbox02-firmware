@@ -25,13 +25,6 @@ void workflow_stack_start_workflow(workflow_t* workflow);
 
 void workflow_stack_stop_workflow(void);
 
-/**
- * Like workflow_stack_kill_workflow, but
- * it will call the "kill" handler of the workflow
- * before deleting it.
- */
-void workflow_stack_kill_workflow(void);
-
 void workflow_stack_clear(void);
 
 #endif

@@ -21,11 +21,8 @@ typedef struct {
     enum {
         COMMANDER_SET_DEV_NAME_STARTED,
         COMMANDER_SET_DEV_NAME_CONFIRMED,
-        COMMANDER_SET_DEV_NAME_REPLY_READY
+        COMMANDER_SET_DEV_NAME_ABORTED
     } state;
-    /* Confirmation result */
-    bool result;
-    commander_error_t reply;
 } device_name_data_t;
 
 #endif // _API_SET_DEVICE_NAME_H
