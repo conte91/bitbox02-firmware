@@ -49,4 +49,14 @@ size_t commander(const uint8_t* input, size_t in_len, uint8_t* output, size_t ma
  */
 void commander_process(void);
 
+/**
+ * Processes a request into a response.
+ *
+ * @param request Request to process.
+ * @param response Response to fill.
+ *
+ * @return Error status.
+ */
+commander_error_t commander_process_request(Request* request, Response* response);
+
 #endif
