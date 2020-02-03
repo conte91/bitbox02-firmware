@@ -402,7 +402,6 @@ commander_error_t commander_process_request(Request* request, Response* response
 
     commander_timeout_reset_timer();
 
-    printf("CMCC");
     if (!commander_states_can_call(request->which_request)) {
         return COMMANDER_ERR_INVALID_STATE;
     }

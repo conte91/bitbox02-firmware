@@ -109,6 +109,8 @@ commander_error_t api_set_device_name(const SetDeviceNameRequest* request)
             _set_dev_name_cleanup();
             result = COMMANDER_ERR_USER_ABORT;
             break;
+        case COMMANDER_SET_DEV_NAME_STARTED:
+            break;
         default:
             Abort("Invalid device_name API status.");
             break;
@@ -116,7 +118,7 @@ commander_error_t api_set_device_name(const SetDeviceNameRequest* request)
         return result;
     }
     if (!_set_dev_name_init(request->name)) {
-        return COMMANDER_ERR_MEMORY;
+        return COMMANDER_ERR_GENERIC;
     }
     workflow_stack_start_workflow(workflow_confirm_scrollable(
         "Name", ((data_t*)state->data)->name, NULL, false, _set_device_name_done, NULL));
