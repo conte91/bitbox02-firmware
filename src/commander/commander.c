@@ -247,6 +247,7 @@ static void _api_cancel(void)
     default:
         break;
     }
+    get_commander_api_state()->request_outstanding = false;
 }
 
 // ------------------------------------ Parse ------------------------------------- //
@@ -381,6 +382,9 @@ static bool _api_is_blocking_request(Request* request)
     if (!state->request_outstanding) {
         return false;
     }
+    if (request->which_request == Request_cancel_tag) {
+        return false;
+    }
     /*
      * A request is outstanding: the given request can
      * go through only if it matches the outstanding request exactly.
@@ -415,14 +419,16 @@ commander_error_t commander_process_request(Request* request, Response* response
 
     commander_error_t result = _api_process(request, response);
     if (result == COMMANDER_STARTED) {
-        /*
-         * The API has requested to block. We need to
-         * stop accepting incoming requests other than
-         * this until either the current request is cancelled,
-         * it times out, or future retries complete the request.
-         */
-        _api_save_status(request);
-        api_state->request_outstanding = true;
+        if (!api_state->request_outstanding) {
+            /*
+            * The API has requested to block. We need to
+            * stop accepting incoming requests other than
+            * this until either the current request is cancelled,
+            * it times out, or future retries complete the request.
+            */
+            _api_save_status(request);
+            api_state->request_outstanding = true;
+        }
     } else {
         api_state->request_outstanding = false;
     }
@@ -469,7 +475,7 @@ size_t commander(
  */
 void commander_process(void)
 {
-    if (get_commander_api_state()->request_outstanding) {
+    if (!get_commander_api_state()->request_outstanding) {
         return;
     }
     if (commander_timeout_get_timer() > COMMANDER_BLOCKING_REQUEST_TIMEOUT) {
