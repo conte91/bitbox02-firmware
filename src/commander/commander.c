@@ -26,6 +26,7 @@
 #include "rust/bitbox02_rust.h"
 #endif
 
+#include <crypto/sha2/sha256.h>
 #include <flags.h>
 #include <hardfault.h>
 #include <keystore.h>
@@ -237,20 +238,16 @@ static commander_error_t _api_reboot(void)
     return COMMANDER_OK;
 }
 
-#if PLATFORM_BITBOX02 == 1
 static void _api_cancel(void)
 {
-    switch (get_commander_api_state()->status) {
-    case COMMANDER_STATUS_SET_NAME:
+    switch (get_commander_api_state()->last_request) {
+    case Request_device_name_tag:
         abort_set_device_name();
         break;
-    case COMMANDER_STATUS_IDLE:
-        break;
     default:
-        Abort("Impossible HWW process status\n");
+        break;
     }
 }
-#endif
 
 // ------------------------------------ Parse ------------------------------------- //
 
@@ -363,6 +360,77 @@ static commander_error_t _api_process(const Request* request, Response* response
     }
 }
 
+static void _api_save_status(Request* request)
+{
+    commander_api_state_t* state = get_commander_api_state();
+    state->last_request = request->which_request;
+    sha256_context_t ctx;
+    sha256_reset(&ctx);
+    noise_sha256_update(&ctx, request, sizeof(*request));
+    sha256_finish(&ctx, state->outstanding_request_hash);
+}
+
+/**
+ * Checks whether the given API request interferes
+ * with a blocking request that is currently being
+ * processed.
+ */
+static bool _api_is_blocking_request(Request* request)
+{
+    commander_api_state_t* state = get_commander_api_state();
+    if (!state->request_outstanding) {
+        return false;
+    }
+    /*
+     * A request is outstanding: the given request can
+     * go through only if it matches the outstanding request exactly.
+     */
+    if (state->last_request != request->which_request) {
+        return true;
+    }
+    uint8_t req_hash[32];
+    sha256_context_t ctx;
+    sha256_reset(&ctx);
+    noise_sha256_update(&ctx, request, sizeof(*request));
+    sha256_finish(&ctx, req_hash);
+    return memcmp(state->outstanding_request_hash, req_hash, sizeof(req_hash)) != 0;
+}
+
+commander_error_t commander_process_request(Request* request, Response* response)
+{
+    commander_api_state_t* api_state = get_commander_api_state();
+
+    commander_timeout_reset_timer();
+
+    printf("CMCC");
+    if (!commander_states_can_call(request->which_request)) {
+        return COMMANDER_ERR_INVALID_STATE;
+    }
+    if (_api_is_blocking_request(request)) {
+        return COMMANDER_ERR_INVALID_STATE;
+    }
+    // Since we will process the call now, so can clear the 'force next' info.
+    // We do this before processing as the api call can potentially define the next api call
+    // to be forced.
+    commander_states_clear_force_next();
+
+    commander_error_t result = _api_process(request, response);
+    if (result == COMMANDER_STARTED) {
+        /*
+         * The API has requested to block. We need to
+         * stop accepting incoming requests other than
+         * this until either the current request is cancelled,
+         * it times out, or future retries complete the request.
+         */
+        _api_save_status(request);
+        api_state->request_outstanding = true;
+    } else {
+        api_state->request_outstanding = false;
+    }
+    util_zero(request, sizeof(*request));
+    return result;
+}
+
 /**
  * Receives and processes a command.
  */
@@ -376,25 +444,18 @@ size_t commander(
 
     pb_istream_t in_stream = pb_istream_from_buffer(input, in_len);
     Request request;
+    /*
+     * Cleanup all the request, so we're sure that
+     * there is no undefined bytes in it after parsing.
+     */
+    memset(&request, 0, sizeof(request));
     commander_error_t err = _parse(&in_stream, &request);
     if (err == COMMANDER_OK) {
-        commander_timeout_reset_timer();
-        if (!commander_states_can_call(request.which_request)) {
-            err = COMMANDER_ERR_INVALID_STATE;
-        } else {
-            // Since we will process the call now, so can clear the 'force next' info.
-            // We do this before processing as the api call can potentially define the next api call
-            // to be forced.
-            commander_states_clear_force_next();
-
-            err = _api_process(&request, &response);
-            util_zero(&request, sizeof(request));
-        }
+        err = commander_process_request(&request, &response);
     }
     if (err != COMMANDER_OK) {
         _report_error(&response, err);
     }
-
     pb_ostream_t out_stream = pb_ostream_from_buffer(output, max_out_len);
     if (!pb_encode(&out_stream, Response_fields, &response)) {
         Abort("Abort: pb_encode");
@@ -402,24 +463,22 @@ size_t commander(
     return out_stream.bytes_written;
 }
 
+#define COMMANDER_BLOCKING_REQUEST_TIMEOUT (50)
+
+/**
+ * Called at every loop.
+ */
 void commander_process(void)
 {
-    switch (get_commander_api_state()->status) {
-    case COMMANDER_STATUS_SET_NAME:
-        process_set_device_name();
-        break;
-    case COMMANDER_STATUS_IDLE:
-        break;
-    default:
-        Abort("Impossible HWW process status\n");
+    if (get_commander_api_state()->request_outstanding) {
+        return;
+    }
+    if (commander_timeout_get_timer() > COMMANDER_BLOCKING_REQUEST_TIMEOUT) {
+        _api_cancel();
     }
 }
 
 #ifdef TESTING
-commander_error_t commander_api_set_device_name(const SetDeviceNameRequest* request)
-{
-    return api_set_device_name(request);
-}
 commander_error_t commander_api_set_mnemonic_passphrase_enabled(
     const SetMnemonicPassphraseEnabledRequest* request)
 {

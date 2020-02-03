@@ -4,22 +4,36 @@
 #include "../commander.h"
 #include "set_device_name.h"
 
-typedef enum {
-    /** No operation is in progress */
-    COMMANDER_STATUS_IDLE,
-    /** We're asking for confirmation for setting the device name. */
-    COMMANDER_STATUS_SET_NAME
-} commander_api_status_t;
+#include <crypto/sha2/sha256.h>
 
 typedef struct {
-    union {
-        device_name_data_t dev_name;
-    } data;
-    commander_api_status_t status;
+    /**
+     * This pointer will be allocated by each blocking API
+     * when it starts. It allows that API endpoint to store
+     * status data between requests.
+     */
+    void* data;
+    /**
+     * Last API request that blocked.
+     */
+    pb_size_t last_request;
+    /**
+     * Whether we have an outstanding request.
+     */
+    bool request_outstanding;
+    /**
+     * Hash of the last request that got blocked
+     * with a COMMANDER_STARTED response. This will
+     * be checked against future incoming requests to
+     * make sure that no other request can be processed until
+     * the original one is finished or cancelled.
+     */
+    uint8_t outstanding_request_hash[32];
 } commander_api_state_t;
 
+/**
+ * Gets a pointer to the global state.
+ */
 commander_api_state_t* get_commander_api_state(void);
-
-uint16_t commander_api_ticks_since_last_packet(void);
 
 #endif

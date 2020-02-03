@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+#include <hardfault.h>
 #include <memory/memory.h>
 #include <ui/workflow_stack.h>
 #include <workflow/confirm.h>
@@ -9,19 +10,68 @@
 #include "../commander_timeout.h"
 #include "api_state.h"
 
-static void _commander_cleanup_set_dev_name(void)
+/**
+ * Data needed for the "set device name" API.
+ */
+typedef struct {
+    char* name;
+    enum {
+        COMMANDER_SET_DEV_NAME_STARTED,
+        COMMANDER_SET_DEV_NAME_CONFIRMED,
+        COMMANDER_SET_DEV_NAME_ABORTED
+    } state;
+} data_t;
+
+static void _set_dev_name_cleanup(void)
 {
-    free(get_commander_api_state()->data.dev_name.name);
-    get_commander_api_state()->status = COMMANDER_STATUS_IDLE;
+    commander_api_state_t* api_state = get_commander_api_state();
+    data_t* data = (data_t*)api_state->data;
+    if (!data) {
+        /* Behave like free(), don't do anything if free()ing a NULL pointer. */
+        return;
+    }
+    free(data->name);
+    free(data);
+    api_state->data = NULL;
 }
 
-#define SET_DEVICE_NAME_TIMEOUT (50)
+/**
+ * @return True on success, false on allocation error.
+ */
+static bool _set_dev_name_init(const char* name)
+{
+    commander_api_state_t* state = get_commander_api_state();
+    /*
+     * Make sure there is no leftover data from previous operations.
+     * This would mean that another operation is in progress,
+     * so the scheduling of requests is broken.
+     */
+    if (state->data) {
+        Abort("Non-null state data in _set_dev_name_init.");
+    }
+    state->data = malloc(sizeof(data_t));
+    if (!state->data) {
+        return false;
+    }
+    data_t* data = (data_t*)state->data;
+    data->name = strdup(name);
+    if (!data->name) {
+        free(state->data);
+        state->data = NULL;
+        return false;
+    }
+    data->state = COMMANDER_SET_DEV_NAME_STARTED;
+    return true;
+}
 
 static void _set_device_name_done(bool result, void* param)
 {
     (void)param;
 
-    device_name_data_t* data = &get_commander_api_state()->data.dev_name;
+    data_t* data = (data_t*)get_commander_api_state()->data;
+    if (!data) {
+        Abort("NULL device_name API data.");
+    }
     if (result) {
         data->state = COMMANDER_SET_DEV_NAME_CONFIRMED;
     } else {
@@ -33,49 +83,42 @@ void abort_set_device_name(void)
 {
     /* Destroy this workflow. */
     workflow_stack_stop_workflow();
-    _commander_cleanup_set_dev_name();
-}
-
-/**
- * Called at every loop, when we are asking the user to confirm
- * the device name.
- */
-void process_set_device_name(void)
-{
-    if (commander_timeout_get_timer() > SET_DEVICE_NAME_TIMEOUT) {
-        abort_set_device_name();
-    }
+    _set_dev_name_cleanup();
 }
 
 commander_error_t api_set_device_name(const SetDeviceNameRequest* request)
 {
     commander_api_state_t* state = get_commander_api_state();
-    if (state->status == COMMANDER_STATUS_SET_NAME) {
-        device_name_data_t* data = &state->data.dev_name;
+    if (state->request_outstanding) {
+        /* Continue the current request. */
+        data_t* data = (data_t*)state->data;
+        if (!data) {
+            Abort("NULL device_name API data.");
+        }
         commander_error_t result = COMMANDER_STARTED;
-        if (data->state == COMMANDER_SET_DEV_NAME_CONFIRMED) {
+        switch (data->state) {
+        case COMMANDER_SET_DEV_NAME_CONFIRMED:
             if (!memory_set_device_name(data->name)) {
                 result = COMMANDER_ERR_MEMORY;
             } else {
                 result = COMMANDER_OK;
             }
-            _commander_cleanup_set_dev_name();
-        } else if (data->state == COMMANDER_SET_DEV_NAME_ABORTED) {
-            _commander_cleanup_set_dev_name();
+            _set_dev_name_cleanup();
+            break;
+        case COMMANDER_SET_DEV_NAME_ABORTED:
+            _set_dev_name_cleanup();
             result = COMMANDER_ERR_USER_ABORT;
+            break;
+        default:
+            Abort("Invalid device_name API status.");
+            break;
         }
         return result;
-    } else if (state->status == COMMANDER_STATUS_IDLE) {
-        state->status = COMMANDER_STATUS_SET_NAME;
-        state->data.dev_name.name = strdup(request->name);
-        if (!state->data.dev_name.name) {
-            return COMMANDER_ERR_MEMORY;
-        }
-        state->data.dev_name.state = COMMANDER_SET_DEV_NAME_STARTED;
-        workflow_stack_start_workflow(workflow_confirm_scrollable(
-            "Name", state->data.dev_name.name, NULL, false, _set_device_name_done, NULL));
-        return COMMANDER_STARTED;
     }
-    /* We're doing something already... */
-    return COMMANDER_ERR_INVALID_STATE;
+    if (!_set_dev_name_init(request->name)) {
+        return COMMANDER_ERR_MEMORY;
+    }
+    workflow_stack_start_workflow(workflow_confirm_scrollable(
+        "Name", ((data_t*)state->data)->name, NULL, false, _set_device_name_done, NULL));
+    return COMMANDER_STARTED;
 }

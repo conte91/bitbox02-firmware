@@ -26,11 +26,13 @@ static void _run_set_device_name(
     bool user_accepts,
     commander_error_t expected_result)
 {
-    static SetDeviceNameRequest request = {
-        .name = "Mia",
-    };
+    static Request request = {0};
+    Response response;
+
     /* Start the first request. */
-    assert_int_equal(COMMANDER_STARTED, commander_api_set_device_name(&request));
+    request.which_request = Request_device_name_tag;
+    strcpy(request.request.device_name.name, "Mia");
+    assert_int_equal(COMMANDER_STARTED, commander_process_request(&request, &response));
 
     /* Now make something happen in the UI */
     if (user_accepts) {
@@ -44,7 +46,9 @@ static void _run_set_device_name(
     workflow->spin(workflow);
 
     /* Repeat the request. This time it should yield a result. */
-    assert_int_equal(expected_result, commander_api_set_device_name(&request));
+    request.which_request = Request_device_name_tag;
+    strcpy(request.request.device_name.name, "Mia");
+    assert_int_equal(expected_result, commander_process_request(&request, &response));
 }
 
 static void _test_api_set_device_name(void** state)
