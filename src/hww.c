@@ -31,10 +31,13 @@
 #define OP_ATTESTATION ((uint8_t)'a')
 #define OP_UNLOCK ((uint8_t)'u')
 #define OP_INFO ((uint8_t)'i')
+#define OP_CANCEL ((uint8_t)'C')
+#define OP_RETRY ((uint8_t)'R')
 
 #define OP_STATUS_SUCCESS ((uint8_t)0)
 #define OP_STATUS_FAILURE ((uint8_t)1)
 #define OP_STATUS_FAILURE_UNINITIALIZED ((uint8_t)2)
+#define OP_STATUS_FAILURE_DEVICE_BUSY ((uint8_t)3)
 
 // in: 'a' + 32 bytes host challenge
 // out: bootloader_hash 32 | device_pubkey 64 | certificate 64 | root_pubkey_identifier 32 |
@@ -166,6 +169,22 @@ static void _msg(const Packet* in_packet, Packet* out_packet, const size_t max_o
     if (!bb_noise_process_msg(in_packet, out_packet, max_out_len, commander)) {
         workflow_status_create("Could not\npair with app", false);
     }
+}
+
+bool hww_blocking_request_can_go_through(const Packet* in_packet)
+{
+    if (in_packet->len == 0) {
+        return false;
+    }
+    uint8_t cmd = in_packet->data_addr[0];
+    return cmd == OP_CANCEL || cmd == OP_RETRY;
+}
+
+void hww_blocked_req_error(Packet* out_packet, const Packet* in_packet)
+{
+    (void)in_packet;
+    out_packet->len = 1;
+    out_packet->data_addr[0] = OP_STATUS_FAILURE_DEVICE_BUSY;
 }
 
 void hww_setup(void)
