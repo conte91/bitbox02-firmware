@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "bootloader.h"
+#include "bootloader_graphics.h"
 #include "bootloader_version.h"
 #include "leds.h"
 #include "mpu_regions.h"
@@ -285,26 +286,6 @@ static void _binary_exec(void)
     _binExec(app_start_addr);
 }
 
-static void _load_logo(void)
-{
-    uint16_t x = 0;
-    uint16_t y = 0;
-    for (size_t i = 0; i < sizeof(IMAGE_BB2_LOGO); i++) {
-        uint8_t b = IMAGE_BB2_LOGO[i];
-        for (uint8_t j = 0; j < 8; j++) {
-            if (b & 0x80) {
-                UG_DrawPixel(x, y, C_WHITE);
-            }
-            b <<= 1;
-            x++;
-            if ((x % IMAGE_BB2_LOGO_W) == 0) {
-                x = 0;
-                y++;
-            }
-        }
-    }
-}
-
 static void _load_arrow(int x, int y, int height)
 {
     int width = height * 2 - 1;
@@ -321,28 +302,10 @@ static void _load_progress_bar(float progress)
     UG_FillFrame(0, SCREEN_HEIGHT - bar_height, SCREEN_WIDTH * progress, SCREEN_HEIGHT, C_WHITE);
 }
 
-static void _render_message(const char* message, int duration)
-{
-    char print[100];
-    snprintf(print, sizeof(print), "%s", message);
-    UG_ClearBuffer();
-    UG_PutString(0, 0, print, false);
-    UG_SendBuffer();
-    delay_ms(duration);
-}
-
-static void _render_default_screen(void)
-{
-    UG_ClearBuffer();
-    _load_logo();
-    UG_PutString(1, SCREEN_HEIGHT - 9, "BOOTLOADER", false);
-    UG_SendBuffer();
-}
-
 static void _render_progress(float progress)
 {
     UG_ClearBuffer();
-    _load_logo();
+    bootloader_graphics_load_logo();
     if (progress > 0) {
         char label[5] = {0};
         snprintf(label, sizeof(label), "%2d%%", (int)(100 * progress));
@@ -353,42 +316,6 @@ static void _render_progress(float progress)
     }
     UG_PutString(SCREEN_WIDTH / 2 - 3, SCREEN_HEIGHT - 9 * 2, "UPGRADING", false);
     UG_SendBuffer();
-}
-
-static void _render_hash(const char* title, const uint8_t* hash)
-{
-    uint8_t seconds = 10;
-    char message[16];
-    char hash_hex[2 * SHA256_DIGEST_LENGTH + 1];
-    util_uint8_to_hex(hash, SHA256_DIGEST_LENGTH, hash_hex);
-    char scratch = 0;
-    for (uint8_t i = 1; i <= seconds; i++) {
-        snprintf(message, sizeof(message), "HASH  (%2ds)", seconds - i);
-        UG_ClearBuffer();
-        UG_PutString(0, SCREEN_HEIGHT - 9, message, false);
-        UG_PutString(0, SCREEN_HEIGHT - 9 * 2, title, false);
-
-        scratch = hash_hex[16];
-        hash_hex[16] = 0;
-        UG_PutString(0, 0, hash_hex, false);
-        hash_hex[16] = scratch;
-
-        scratch = hash_hex[32];
-        hash_hex[32] = 0;
-        UG_PutString(0, 9, &hash_hex[16], false);
-        hash_hex[32] = scratch;
-
-        scratch = hash_hex[48];
-        hash_hex[48] = 0;
-        UG_PutString(0, 18, &hash_hex[32], false);
-        hash_hex[48] = scratch;
-
-        UG_PutString(0, 27, &hash_hex[48], false);
-
-        UG_SendBuffer();
-        delay_ms(1000);
-    }
-    _render_default_screen();
 }
 
 static size_t _report_status(uint8_t status, uint8_t* output)
@@ -559,7 +486,7 @@ static void _maybe_show_hash(void)
     }
     uint8_t hash[SHA256_DIGEST_LENGTH];
     _firmware_hash(data, hash);
-    _render_hash("FIRMWARE", hash);
+    bootloader_graphics_render_hash("FIRMWARE", hash);
 }
 
 /*
@@ -714,14 +641,14 @@ static size_t _api_get_hashes(const uint8_t* input, uint8_t* output)
     memcpy(output + BOOT_OP_LEN, hash, SHA256_DIGEST_LENGTH);
 
     if (input[0]) {
-        _render_hash("FIRMWARE", hash);
+        bootloader_graphics_render_hash("FIRMWARE", hash);
     }
 
     _hash_signing_keys(data, hash);
     memcpy(output + BOOT_OP_LEN + SHA256_DIGEST_LENGTH, hash, SHA256_DIGEST_LENGTH);
 
     if (input[1]) {
-        _render_hash("SIGKEYS", hash);
+        bootloader_graphics_render_hash("SIGKEYS", hash);
     }
 
     size_t len = _report_status(OP_STATUS_OK, output);
@@ -781,7 +708,7 @@ static size_t _api_screen_rotate(uint8_t* output)
         return _report_status(OP_STATUS_ERR_LOAD_FLAG, output);
     }
     screen_rotate();
-    _render_default_screen();
+    bootloader_graphics_render_default_screen();
     return _report_status(OP_STATUS_OK, output);
 #elif PLATFORM_BITBOXBASE == 1
     return _report_status(OP_STATUS_ERR_INVALID_CMD, output);
@@ -819,7 +746,7 @@ static size_t _api_command(const uint8_t* input, uint8_t* output, const size_t m
         uint8_t chunk_num = input[1];
         len = _api_write_chunk(input + 2, chunk_num, output);
         if (output[1] != OP_STATUS_OK) {
-            _render_default_screen();
+            bootloader_graphics_render_default_screen();
         } else {
             _render_progress((float)chunk_num / (float)(_firmware_num_chunks - 1));
         }
@@ -836,7 +763,7 @@ static size_t _api_command(const uint8_t* input, uint8_t* output, const size_t m
         _loading_ready = 0;
         char msg[100];
         snprintf(msg, 100, "Command: %u unknown", input[0]);
-        _render_message(msg, 1000);
+        bootloader_graphics_render_message(msg, 1000);
         break;
     }
 
@@ -980,15 +907,15 @@ void bootloader_jump(void)
 #endif
 #else
         _firmware_verified_jump(&bootdata, sectrue_u32); // no return if firmware is valid
-        _render_message("Firmware\ninvalid\n \nEntering bootloader", 3000);
+        bootloader_graphics_render_message("Firmware\ninvalid\n \nEntering bootloader", 3000);
 #endif
     }
 
     // App not entered. Start USB API to receive boot commands
-    _render_default_screen();
+    bootloader_graphics_render_default_screen();
 #if PLATFORM_BITBOX02 == 1
     if (usb_start(_api_setup) != ERR_NONE) {
-        _render_message("Failed to initialize USB", 0);
+        bootloader_graphics_render_message("Failed to initialize USB", 0);
     }
 #elif PLATFORM_BITBOXBASE == 1
     usart_start();
