@@ -60,6 +60,12 @@ typedef struct {
      * (blocking) on the U2F stack.
      */
     uint8_t last_cmd;
+    /**
+     * Keeps track of whether there is an outstanding
+     * U2F operation going on in the background.
+     * This is not strictly necessary, but it's useful
+     * to have as a sanity checking mechanism.
+     */
     bool locked;
 } u2f_state_t;
 

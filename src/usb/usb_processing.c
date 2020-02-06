@@ -262,6 +262,7 @@ static void _usb_arbitrate_packet(struct usb_processing* ctx, const Packet* in_p
     if (!can_go_through) {
         /* The receiving state should send back an error */
         Packet out_packet;
+        _prepare_out_packet(in_packet, &out_packet);
         ctx->create_blocked_req_error(&out_packet, in_packet);
         _enqueue_frames(ctx, &out_packet);
     } else {
