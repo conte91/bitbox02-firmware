@@ -296,14 +296,13 @@ static bool ctap_confirm_authentication(struct rpId* rp, bool up, bool uv)
     if (prompt_size >= 100) {
         prompt_buf[99] = '\0';
     }
-    return workflow_confirm_with_timeout(
-        "FIDO2", prompt_buf, NULL, false, 
-        /*
-         * We don't have realtime measures, 
-         * just use a heuristic to convert ms -> #ticks
-         */
-        CTAP2_UP_DELAY_MS * 4.7
-        );
+
+    const confirm_params_t params = {
+        .title = "FIDO2",
+        .body = prompt_buf,
+        .scrollable = false,
+    };
+    return workflow_confirm_blocking(&params);
 }
 
 /**
@@ -477,14 +476,11 @@ static bool _allow_make_credential(CTAP_makeCredential* req)
     if (prompt_size >= 100) {
         prompt_buf[99] = '\0';
     }
-    return workflow_confirm_with_timeout(
-        "FIDO2", prompt_buf, NULL, false, 
-        /*
-         * We don't have realtime measures, 
-         * just use a heuristic to convert ms -> #ticks
-         */
-        CTAP2_UP_DELAY_MS * 4.7
-        );
+    const confirm_params_t params = {
+        .title = "FIDO2",
+        .body = prompt_buf,
+    };
+    return workflow_confirm_blocking(&params);
 }
 
 /**
@@ -524,9 +520,11 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
 }
 
 static bool _ask_generic_authorization(void) {
-        return workflow_confirm_with_timeout(
-            "FIDO2", "Proceed?", NULL, false, CTAP2_UP_DELAY_MS * 4.7
-        );
+    const confirm_params_t params = {
+        .title = "FIDO2",
+        .body = "Proceed?",
+    };
+    return workflow_confirm_blocking(&params);
 }
 
 static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
@@ -576,7 +574,7 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
         return result;
     }
 
-    if (!workflow_unlock()) {
+    if (!workflow_unlock_blocking()) {
         /*
          * User didn't authenticate.
          * Let's count this as a "user denied" error.
