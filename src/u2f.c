@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <driver_init.h>
 #include <fido2/ctap.h>
 #include <fido2/ctap_errors.h>
 #include <hardfault.h>
@@ -50,7 +51,6 @@ typedef struct {
 } USB_APDU;
 
 #define APDU_LEN(A) (uint32_t)(((A).lc1 << 16) + ((A).lc2 << 8) + ((A).lc3))
-#define U2F_TIMEOUT 500 // [msec]
 #define U2F_KEYHANDLE_LEN (U2F_NONCE_LENGTH + SHA256_LEN)
 
 #if (U2F_EC_COORD_SIZE != SHA256_LEN) || (U2F_EC_COORD_SIZE != U2F_NONCE_LENGTH)
@@ -524,6 +524,16 @@ static void _cmd_wink(const Packet* in_packet)
     usb_processing_send_packet(usb_processing_u2f(), &out_packet);
 }
 
+static void _cmd_cancel(const Packet* in_packet)
+{
+    (void)in_packet;
+    //screen_print_debug("CANCEL", 500);
+    /*
+     * U2FHID_CANCEL messages should abort the current transaction,
+     * but no response should be given.
+     */
+}
+
 /**
  * Synchronize a channel and optionally requests a unique 32-bit channel identifier (CID)
  * that can be used by the requesting application during its lifetime.
@@ -636,6 +646,7 @@ static void _cmd_cbor(const Packet* in_packet, Packet* out_packet, const size_t 
     out_packet->data_addr[0] = status;
     out_packet->len++;
     printf("CBOR success\n");
+    //screen_print_debug("CBOR success :)",500);
 }
 
 bool u2f_blocking_request_can_go_through(const Packet* in_packet)
@@ -676,6 +687,11 @@ void u2f_process(void)
 }
 
 
+void u2f_timer(void)
+{
+    _state.ctap_keepalive_timer++;
+}
+
 /**
  * Set up the U2F commands.
  */
@@ -687,6 +703,7 @@ void u2f_device_setup(void)
         {U2FHID_INIT, _cmd_init},
         {U2FHID_MSG, _cmd_msg},
         {U2FHID_CBOR, _cmd_cbor},
+        {U2FHID_CANCEL, _cmd_cancel},
     };
     usb_processing_register_cmds(
         usb_processing_u2f(), u2f_cmd_callbacks, sizeof(u2f_cmd_callbacks) / sizeof(CMD_Callback));
