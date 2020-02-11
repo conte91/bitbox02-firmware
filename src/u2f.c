@@ -50,7 +50,6 @@ typedef struct {
 } USB_APDU;
 
 #define APDU_LEN(A) (uint32_t)(((A).lc1 << 16) + ((A).lc2 << 8) + ((A).lc3))
-#define U2F_TIMEOUT 500 // [msec]
 #define U2F_KEYHANDLE_LEN (U2F_NONCE_LENGTH + SHA256_LEN)
 
 #if (U2F_EC_COORD_SIZE != SHA256_LEN) || (U2F_EC_COORD_SIZE != U2F_NONCE_LENGTH)
