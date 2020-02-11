@@ -24,6 +24,7 @@
 #include <crypto/sha2/sha256.h>
 #include <screen.h>
 #include <securechip/securechip.h>
+#include <ui/workflow_stack.h>
 #include <usb/usb_packet.h>
 #include <util.h>
 #include <workflow/confirm.h>
@@ -54,8 +55,30 @@
     } while(0);
 
 
+typedef struct {
+    enum {
+        CTAP_MAKE_CREDENTIAL_STARTED,
+        CTAP_MAKE_CREDENTIAL_UNLOCKED,
+        CTAP_MAKE_CREDENTIAL_WAIT_CONFIRM,
+        CTAP_MAKE_CREDENTIAL_FINISHED,
+        CTAP_MAKE_CREDENTIAL_FAILED,
+    } state;
+    CTAP_makeCredential req;
+} ctap_make_credential_state_t;
+
+static struct {
+    enum {
+        CTAP_BLOCKING_OP_NONE,
+        CTAP_BLOCKING_OP_MAKE_CRED
+    } blocking_op;
+    union {
+        ctap_make_credential_state_t make_cred;
+    } data;
+} _state = {0};
+
 static uint8_t ctap_get_info(CborEncoder * encoder)
 {
+    (void)_state;
     int ret;
     CborEncoder array;
     CborEncoder map;
@@ -456,34 +479,6 @@ static bool _confirm_overwrite_credential(void) {
 }
 
 /**
- * Asks the user whether he wants to proceed
- * with the creation of a new credential.
- * @param req MakeCredential CTAP request.
- * @return Whether the user has agreed or not.
- */
-static bool _allow_make_credential(CTAP_makeCredential* req)
-{
-    char prompt_buf[100];
-    size_t prompt_size;
-    if (req->rp.name && req->rp.name[0] != '\0') {
-        /* There is a human-readable name attached to this domain. */
-        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%s\n(%.*s)\n",
-                               req->rp.name, (int)req->rp.size, req->rp.id);
-    } else {
-        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%.*s\n",
-                               (int)req->rp.size, req->rp.id);
-    }
-    if (prompt_size >= 100) {
-        prompt_buf[99] = '\0';
-    }
-    const confirm_params_t params = {
-        .title = "FIDO2",
-        .body = prompt_buf,
-    };
-    return workflow_confirm_blocking(&params);
-}
-
-/**
  * Check if any of the keys in a MakeCredential's
  * excludeList belong to our device.
  *
@@ -525,6 +520,72 @@ static bool _ask_generic_authorization(void) {
         .body = "Proceed?",
     };
     return workflow_confirm_blocking(&params);
+}
+
+/**
+ * Called after the user has confirmed (or declined) the
+ * creation of a new credential.
+ */
+static void _make_credential_allow_cb(bool result, void* param) {
+    (void)param;
+    if (result) {
+        _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_FINISHED;
+    } else {
+        _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_FAILED;
+    }
+}
+
+/**
+ * Asks the user whether he wants to proceed
+ * with the creation of a new credential.
+ * @param req MakeCredential CTAP request.
+ * @return Confirmation workflow.
+ */
+static workflow_t* _make_credential_allow(CTAP_makeCredential* req)
+{
+    char prompt_buf[100];
+    size_t prompt_size;
+    if (req->rp.name && req->rp.name[0] != '\0') {
+        /* There is a human-readable name attached to this domain. */
+        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%s\n(%.*s)\n",
+                               req->rp.name, (int)req->rp.size, req->rp.id);
+    } else {
+        prompt_size = snprintf(prompt_buf, 100, "Create credential for\n%.*s\n",
+                               (int)req->rp.size, req->rp.id);
+    }
+    if (prompt_size >= 100) {
+        prompt_buf[99] = '\0';
+    }
+    const confirm_params_t params = {
+        .title = "FIDO2",
+        .body = prompt_buf,
+    };
+    return workflow_confirm(&params, _make_credential_allow_cb, NULL);
+}
+
+static void _make_credential_unlock_cb(bool result, void* param) {
+    (void)param;
+    //screen_sprintf_debug(1000, "UNLOCK CB %d", result);
+    if (!result) {
+        /*
+         * User didn't authenticate.
+         * Let's count this as a "user denied" error.
+         */
+        _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_FAILED;
+        return;
+    }
+    _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_UNLOCKED;
+}
+
+static void _make_credential_init_state(CTAP_makeCredential* req)
+{
+    _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_STARTED;
+    memcpy(&_state.data.make_cred.req, req, sizeof(*req));
+}
+
+static void _make_credential_free_state(void)
+{
+    free(&_state.data.make_cred.req);
 }
 
 static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
@@ -574,47 +635,38 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
         return result;
     }
 
-    if (!workflow_unlock_blocking()) {
-        /*
-         * User didn't authenticate.
-         * Let's count this as a "user denied" error.
-         */
-        workflow_status_create("Operation cancelled", false);
-        result.status = CTAP2_ERR_OPERATION_DENIED;
-        return result;
-    }
+    _make_credential_init_state(&MC);
+    workflow_stack_start_workflow(workflow_unlock(_make_credential_unlock_cb, NULL));
+    result.request_completed = false;
+    _state.blocking_op = CTAP_BLOCKING_OP_MAKE_CRED;
+    return result;
+}
 
-    /*
-     * Request permission to the user.
-     * This must be done before checking for excluded credentials etc.
-     * so that we don't reveal the existance of credentials without
-     * the user's consent.
-     */
-    if (!_allow_make_credential(&MC)) {
-        workflow_status_create("Operation cancelled", false);
-        result.status = CTAP2_ERR_OPERATION_DENIED;
-        return result;
-    }
-
+/**
+ * Generates a new credential in response to a MakeCredential request.
+ * Only called when the user has already accepted and identified with the device.
+ */
+static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
+{
+    ctap_make_credential_state_t* state = &_state.data.make_cred;
     /*
      * The exclude list contains a list of credentials that we
      * must check. If any credential was generated by our device,
      * we must return with an error. This allows the server to avoid
      * us creating more than one credential for the same user/device pair.
      */
-    ret = _verify_exclude_list(&MC);
-    check_cbor_or_exit(ret);
+    int ret = _verify_exclude_list(&state->req);
+    check_retr(ret);
 
     /* Update the U2F counter. */
     uint32_t u2f_counter;
     if (!securechip_u2f_counter_inc(&u2f_counter)) {
         workflow_status_create("Failed to create key.", false);
-        result.status = CTAP2_ERR_OPERATION_DENIED;
-        return result;
+        return CTAP2_ERR_OPERATION_DENIED;
     }
 
     ctap_auth_data_t auth_data;
-    _compute_rpid_hash(&MC.rp, auth_data.head.rpIdHash);
+    _compute_rpid_hash(&state->req.rp, auth_data.head.rpIdHash);
 
     /* Generate the key. */
     memset((uint8_t*)&auth_data.attest.id, 0, sizeof(u2f_keyhandle_t));
@@ -623,7 +675,7 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
     uint8_t pubkey[64];
     uint8_t privkey[HMAC_SHA256_LEN];
     UTIL_CLEANUP_32(privkey);
-    bool key_create_success = u2f_keyhandle_create_key(MC.rp.id, nonce, privkey, mac, pubkey);
+    bool key_create_success = u2f_keyhandle_create_key(state->req.rp.id, nonce, privkey, mac, pubkey);
     if (!key_create_success) {
         /* TODO: simo: do something. */
         Abort("Failed to create new FIDO2 key.");
@@ -635,29 +687,28 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
      * available location. Otherwise, overwrite
      * the existing key (after confirming with the user).
      */
-    if (MC.credInfo.rk) {
+    if (state->req.credInfo.rk) {
         ctap_resident_key_t rk_to_store;
         memset(&rk_to_store, 0, sizeof(rk_to_store));
         memcpy(&rk_to_store.key_handle, &auth_data.attest.id, sizeof(rk_to_store.key_handle));
         memcpy(&rk_to_store.rp_id_hash, auth_data.head.rpIdHash, sizeof(auth_data.head.rpIdHash));
-        _copy_or_truncate((char*)rk_to_store.rp_id, sizeof(rk_to_store.rp_id), (const char*)MC.rp.id);
-        _copy_or_truncate((char*)rk_to_store.user_name, sizeof(rk_to_store.user_name), (const char*)MC.credInfo.user.name);
-        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)MC.credInfo.user.displayName);
+        _copy_or_truncate((char*)rk_to_store.rp_id, sizeof(rk_to_store.rp_id), (const char*)state->req.rp.id);
+        _copy_or_truncate((char*)rk_to_store.user_name, sizeof(rk_to_store.user_name), (const char*)state->req.credInfo.user.name);
+        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)state->req.credInfo.user.displayName);
         rk_to_store.valid = CTAP_RESIDENT_KEY_VALID;
         rk_to_store.creation_time = u2f_counter;
-        if (MC.credInfo.user.id_size > CTAP_USER_ID_MAX_SIZE) {
+        if (state->req.credInfo.user.id_size > CTAP_USER_ID_MAX_SIZE) {
             /* We can't store such a big user ID.
              * But we can't even truncate it... So nothing we can do, alas.
              */
-            result.status = CTAP2_ERR_REQUEST_TOO_LARGE;
-            return result;
+            return CTAP2_ERR_REQUEST_TOO_LARGE;
         }
         //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
-        //MC.credInfo.user.id_size,
-        //MC.credInfo.user.id[0], MC.credInfo.user.id[MC.credInfo.user.id_size - 1]
+        //state->req.credInfo.user.id_size,
+        //state->req.credInfo.user.id[0], state->req.credInfo.user.id[state->req.credInfo.user.id_size - 1]
         //);
-        rk_to_store.user_id_size = MC.credInfo.user.id_size;
-        memcpy(rk_to_store.user_id, MC.credInfo.user.id, MC.credInfo.user.id_size);
+        rk_to_store.user_id_size = state->req.credInfo.user.id_size;
+        memcpy(rk_to_store.user_id, state->req.credInfo.user.id, state->req.credInfo.user.id_size);
 
         int store_location = 0;
         bool must_overwrite = false;
@@ -689,14 +740,12 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
         }
         if (!free_spot_found) {
             workflow_status_create("Out of memory for resident keys", false);
-            result.status = CTAP2_ERR_KEY_STORE_FULL;
-            return result;
+            return CTAP2_ERR_KEY_STORE_FULL;
         }
         if (must_overwrite) {
             if (!_confirm_overwrite_credential()) {
                 workflow_status_create("Operation cancelled", false);
-                result.status = CTAP2_ERR_OPERATION_DENIED;
-                return result;
+                return CTAP2_ERR_OPERATION_DENIED;
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
@@ -713,9 +762,12 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
      * This is an attestation object, as defined
      * in [WebAuthn], 6.4 (Figure 5).
      */
+    CborEncoder encoder;
     CborEncoder attest_obj;
-    ret = cbor_encoder_create_map(encoder, &attest_obj, 3);
-    check_cbor_or_exit(ret);
+    memset(&encoder,0,sizeof(CborEncoder));
+    cbor_encoder_init(&encoder, out_data, USB_DATA_MAX_LEN, 0);
+    ret = cbor_encoder_create_map(&encoder, &attest_obj, 3);
+    check_ret(ret);
 
     /*
      * First comes the Authenticator Data.
@@ -737,7 +789,7 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
     uint8_t* cose_key_buf = auth_data.other;
     cbor_encoder_init(&cose_key, cose_key_buf, sizeof(auth_data.other), 0);
     ret = ctap_add_cose_key(&cose_key, pubkey, pubkey + 32, COSE_ALG_ES256);
-    check_ret_or_exit(ret);
+    check_retr(ret);
     size_t cose_key_len = cbor_encoder_get_buffer_size(&cose_key, cose_key_buf);
     size_t actual_auth_data_len = sizeof(auth_data) - sizeof(auth_data.other) + cose_key_len;
 
@@ -751,37 +803,68 @@ static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const u
      */
     {
         ret = cbor_encode_int(&attest_obj, RESP_fmt);
-        check_cbor_or_exit(ret);
+        check_ret(ret);
         ret = cbor_encode_text_stringz(&attest_obj, "packed");
-        check_cbor_or_exit(ret);
+        check_ret(ret);
     }
 
 
     {
         ret = cbor_encode_int(&attest_obj, RESP_authData);
-        check_cbor_or_exit(ret);
+        check_ret(ret);
         ret = cbor_encode_byte_string(&attest_obj, (uint8_t*)&auth_data, actual_auth_data_len);
-        check_cbor_or_exit(ret);
+        check_ret(ret);
     }
 
     /* Compute the attestation statement. */
     uint8_t sigbuf[32];
-    bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, MC.clientDataHash, sigbuf);
+    bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, state->req.clientDataHash, sigbuf);
     if (!sig_success) {
-        result.status = CTAP1_ERR_OTHER;
-        return result;
+        return CTAP1_ERR_OTHER;
     }
     uint8_t attest_signature[72];
     int attest_sig_size = _encode_der_sig(sigbuf, attest_signature);
 
     ret = _add_attest_statement(&attest_obj, attest_signature, attest_sig_size);
-    check_ret_or_exit(ret);
+    check_retr(ret);
 
-    ret = cbor_encoder_close_container(encoder, &attest_obj);
-    check_cbor_or_exit(ret);
-    workflow_status_create("Registration\ncompleted.", true);
-    result.status = CTAP1_ERR_SUCCESS;
-    return result;
+    ret = cbor_encoder_close_container(&encoder, &attest_obj);
+    check_ret(ret);
+    //workflow_status_create("Registration\ncompleted.", true);
+    *out_len = cbor_encoder_get_buffer_size(&encoder, out_data);
+    return CTAP1_ERR_SUCCESS;
+}
+
+static ctap_request_result_t _make_credential_continue(uint8_t* out_data, size_t* out_len) {
+    ctap_request_result_t result = {.status = 0, .request_completed = true};
+    ctap_make_credential_state_t* state = &_state.data.make_cred;
+
+    switch (state->state) {
+        case CTAP_MAKE_CREDENTIAL_UNLOCKED:
+            /*
+            * Request permission to the user.
+            * This must be done before checking for excluded credentials etc.
+            * so that we don't reveal the existance of credentials without
+            * the user's consent.
+            */
+            workflow_stack_start_workflow(_make_credential_allow(&_state.data.make_cred.req));
+            state->state = CTAP_MAKE_CREDENTIAL_WAIT_CONFIRM;
+            result.request_completed = false;
+            return result;
+        case CTAP_MAKE_CREDENTIAL_FINISHED:
+            result.status = _make_credential_complete(out_data, out_len);
+            return result;
+        case CTAP_MAKE_CREDENTIAL_FAILED:
+            workflow_status_create("Operation cancelled", false);
+            result.status = CTAP2_ERR_OPERATION_DENIED;
+            return result;
+        case CTAP_MAKE_CREDENTIAL_STARTED:
+        case CTAP_MAKE_CREDENTIAL_WAIT_CONFIRM:
+            result.request_completed = false;
+            return result;
+        default:
+            Abort("Invalid make_credential state");
+    }
 }
 
 static uint8_t ctap_add_credential_descriptor(CborEncoder* map, u2f_keyhandle_t* key_handle)
@@ -1231,9 +1314,20 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
 
 ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len)
 {
-    (void)out_data;
-    (void)out_len;
     //Abort("ctap_retry not implemented yet, should never be called.");
-    ctap_request_result_t result = {.status = 0, .request_completed = false};
+    ctap_request_result_t result = {.status = 0, .request_completed = true};
+
+    switch (_state.blocking_op) {
+        case CTAP_BLOCKING_OP_MAKE_CRED:
+            result = _make_credential_continue(out_data, out_len);
+            if (result.request_completed) {
+                _state.blocking_op = CTAP_BLOCKING_OP_NONE;
+                _make_credential_free_state();
+            }
+            break;
+        case CTAP_BLOCKING_OP_NONE:
+        default:
+            Abort("Invalid status in ctap_retry");
+    }
     return result;
 }
