@@ -18,6 +18,7 @@
 
 #include <fido2/ctap.h>
 #include <fido2/ctap_errors.h>
+#include <fido2/device.h>
 #include <hardfault.h>
 #include <keystore.h>
 #include <memory/memory.h>
@@ -78,6 +79,21 @@ typedef struct {
      * to have as a sanity checking mechanism.
      */
     bool locked;
+    /**
+     * If a CTAP operation is pending, it needs to be polled
+     * in the background.
+     */
+    bool ctap_op_pending;
+    /**
+     * This value is incremented by a timer every 20ms.
+     * It is used to periodically send CTAP keepalives to the host.
+     */
+    uint16_t ctap_keepalive_timer;
+    /**
+     * If a CTAP operation is pending, this pointer will point to
+     * a pre-allocated packet, prepared with the proper header.
+     */
+    Packet* ctap_pending_response;
 } u2f_state_t;
 
 static u2f_state_t _state = {0};
@@ -521,6 +537,19 @@ static void _cmd_wink(const Packet* in_packet)
     usb_send_packet(usb_processing_u2f(), &out_packet);
 }
 
+static void _cmd_keepalive(const Packet* in_packet)
+{
+    Packet out_packet = prepare_usb_packet(in_packet->cmd, in_packet->cid);
+
+    screen_print_debug("KEEPALIVE!!", 500);
+    util_zero(out_packet.data_addr, sizeof(out_packet.data_addr));
+    out_packet.len = 1;
+    out_packet.cmd = U2FHID_KEEPALIVE;
+    out_packet.cid = in_packet->cid;
+    out_packet.data_addr[0] = CTAPHID_STATUS_UPNEEDED;
+    usb_send_packet(usb_processing_u2f(), &out_packet);
+}
+
 /**
  * Synchronize a channel and optionally requests a unique 32-bit channel identifier (CID)
  * that can be used by the requesting application during its lifetime.
@@ -632,12 +661,26 @@ static void _cmd_cbor(const Packet* in_packet) {
          * to go through.
          */
         _lock(NULL);
+        _state.ctap_keepalive_timer = 0;
+        _state.ctap_op_pending = true;
+        _state.ctap_pending_response = malloc(sizeof(*_state.ctap_pending_response));
+        if (!_state.ctap_pending_response) {
+            /* Failed to allocate a big buffer - so we should be able to recover. */
+            _state.ctap_op_pending = false;
+            _unlock();
+            _error_hid(in_packet->cid, CTAP1_ERR_OTHER, &out_packet);
+            usb_send_packet(usb_processing_u2f(), &out_packet);
+            return;
+        }
+        /* Save the output packet for later use. */
+        memcpy(_state.ctap_pending_response, &out_packet, sizeof(out_packet));
         return;
     }
     /* Request completed, send a response. */
     if (result.status != CTAP1_ERR_SUCCESS) {
         printf("CBOR error: %d\n", result.status);
         _error_hid(in_packet->cid, result.status, &out_packet);
+        usb_send_packet(usb_processing_u2f(), &out_packet);
         return;
     }
     out_packet.data_addr[0] = result.status;
@@ -678,9 +721,31 @@ void u2f_blocked_req_error(Packet* out_packet, const Packet* in_packet)
     _error(U2F_SW_CONDITIONS_NOT_SATISFIED, out_packet);
 }
 
+#define CTAP_KEEPALIVE_PERIOD (1)
+
 void u2f_process(void)
 {
-    /** Nothing to do here. */
+    if (_state.ctap_op_pending) {
+        if (!_state.ctap_pending_response) {
+            Abort("NULL pending response buffer in u2f_process.\n");
+        }
+        ctap_request_result_t result = ctap_retry(_state.ctap_pending_response->data_addr + 1, &_state.ctap_pending_response->len);
+        if (!result.request_completed) {
+            if (_state.ctap_keepalive_timer >= CTAP_KEEPALIVE_PERIOD) {
+                _state.ctap_keepalive_timer = 0;
+                _state.ctap_pending_response->len = 1;
+                _state.ctap_pending_response->cmd = U2FHID_KEEPALIVE;
+                _state.ctap_pending_response->data_addr[0] = CTAPHID_STATUS_UPNEEDED;
+                usb_send_packet(usb_processing_u2f(), _state.ctap_pending_response);
+            }
+        } else {
+            /*
+            * The CTAP operation has finished!
+            */
+            _unlock();
+            _state.ctap_op_pending = false;
+        }
+    }
 }
 
 
@@ -695,6 +760,7 @@ void u2f_device_setup(void)
         {U2FHID_INIT, _cmd_init},
         {U2FHID_MSG, _cmd_msg},
         {U2FHID_CBOR, _cmd_cbor},
+        {U2FHID_KEEPALIVE, _cmd_keepalive},
     };
     usb_processing_register_cmds(
         usb_processing_u2f(), u2f_cmd_callbacks, sizeof(u2f_cmd_callbacks) / sizeof(CMD_Callback));

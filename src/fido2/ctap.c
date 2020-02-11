@@ -1229,3 +1229,11 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
     return result;
 }
 
+ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len)
+{
+    (void)out_data;
+    (void)out_len;
+    //Abort("ctap_retry not implemented yet, should never be called.");
+    ctap_request_result_t result = {.status = 0, .request_completed = false};
+    return result;
+}
