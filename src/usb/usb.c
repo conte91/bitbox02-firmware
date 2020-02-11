@@ -26,12 +26,12 @@
 
 #ifndef TESTING
 #include <hal_timer.h>
+#include <u2f.h>
 #include <u2f/u2f_packet.h>
 #include <usb/usb_packet.h>
-extern struct timer_descriptor TIMER_0;
 #endif
 
-#define TIMEOUT_TICK_PERIOD_MS 100
+#define TIMEOUT_TICK_PERIOD_MS 50
 
 #ifndef TESTING
 static uint8_t _ctrl_endpoint_buffer[USB_REPORT_SIZE];
