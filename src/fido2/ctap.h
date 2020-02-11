@@ -34,6 +34,13 @@
 
 #include <usb/usb_packet.h>
 
+/**
+ * Authenticator Status, transmitted through keepalive messages.
+ */
+#define CTAPHID_STATUS_IDLE         0
+#define CTAPHID_STATUS_PROCESSING   1
+#define CTAPHID_STATUS_UPNEEDED     2
+
 #define EXT_HMAC_SECRET_COSE_KEY    0x01
 #define EXT_HMAC_SECRET_SALT_ENC    0x02
 #define EXT_HMAC_SECRET_SALT_AUTH   0x03
@@ -371,6 +378,15 @@ typedef struct
 void ctap_response_init(CTAP_RESPONSE * resp);
 
 uint8_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
+
+/**
+ * Polls an outstanding operation for completion.
+ *
+ * @param out_data Buffer to fill with a response (if any is ready).
+ * @param out_len[out] Length of the response contained in out_data.
+ * @return Request status.
+ */
+ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len);
 
 // Encodes R,S signature to 2 der sequence of two integers.  Sigder must be at least 72 bytes.
 // @return length of der signature
