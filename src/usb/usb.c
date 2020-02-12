@@ -25,6 +25,7 @@
 #include "usb_processing.h"
 
 #ifndef TESTING
+#include <driver_init.h>
 #include <hal_timer.h>
 #include <u2f.h>
 #include <u2f/u2f_packet.h>

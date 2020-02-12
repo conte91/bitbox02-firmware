@@ -1153,7 +1153,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
     /* Sanity check the key and extract the private key. */
     bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)chosen_credential_out, sizeof(*chosen_credential_out), chosen_privkey);
     if (!key_valid) {
-        workflow_status_create("Internal error. Invalid key selected.", false);
+        workflow_status_create("Internal error. Keyhandle verification failed.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     return CTAP1_ERR_SUCCESS;

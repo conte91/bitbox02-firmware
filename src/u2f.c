@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <driver_init.h>
 #include <fido2/ctap.h>
 #include <fido2/ctap_errors.h>
 #include <fido2/device.h>
@@ -690,7 +689,7 @@ static void _cmd_cbor(const Packet* in_packet) {
     /* Request completed, send a response. */
     if (result.status != CTAP1_ERR_SUCCESS) {
         printf("CBOR error: %d\n", result.status);
-        screen_sprintf_debug(500, "CBOR failure :( %d", result.status);
+        screen_sprintf_debug(500, "CBOR failure cmd :( %d", result.status);
         _error_hid(in_packet->cid, result.status, &out_packet);
         usb_send_packet(usb_processing_u2f(), &out_packet);
         return;
@@ -763,7 +762,7 @@ void u2f_process(void)
             */
             if (result.status != CTAP1_ERR_SUCCESS) {
                 printf("CBOR error: %d\n", result.status);
-                screen_sprintf_debug(500, "CBOR failure :( %d", result.status);
+                screen_sprintf_debug(500, "CBOR failure retry :( %d", result.status);
                 _error_hid(_state.ctap_pending_response->cid, result.status, _state.ctap_pending_response);
                 usb_send_packet(usb_processing_u2f(), _state.ctap_pending_response);
             } else {
