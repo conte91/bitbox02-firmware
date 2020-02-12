@@ -59,8 +59,10 @@ typedef struct {
 typedef struct {
     enum {
         CTAP_GET_ASSERTION_STARTED,
-        CTAP_GET_ASSERTION_FINISHED,
+        CTAP_GET_ASSERTION_UNLOCKED,
+        CTAP_GET_ASSERTION_WAIT_CONFIRM,
         CTAP_GET_ASSERTION_FAILED,
+        CTAP_GET_ASSERTION_FINISHED,
     } state;
     CTAP_getAssertion req;
 } ctap_get_assertion_state_t;
@@ -301,6 +303,19 @@ static int _is_matching_rk(ctap_resident_key_t* rk, ctap_resident_key_t* rk2)
     return (memcmp(rk->rp_id_hash, rk2->rp_id_hash, 32) == 0) &&
             (memcmp(rk->rp_id, rk2->rp_id, CTAP_STORAGE_RP_ID_MAX_SIZE) == 0) &&
             (memcmp(rk->user_name, rk2->user_name, CTAP_STORAGE_USER_NAME_LIMIT) == 0);
+}
+
+static void _get_assertion_unlock_cb(bool result, void* param) {
+    (void)param;
+    if (!result) {
+        /*
+         * User didn't authenticate.
+         * Let's count this as a "user denied" error.
+         */
+        _state.data.get_assertion.state = CTAP_GET_ASSERTION_FAILED;
+        return;
+    }
+    _state.data.get_assertion.state = CTAP_GET_ASSERTION_UNLOCKED;
 }
 
 static void _get_assertion_allow_cb(bool result, void* param)
@@ -1201,7 +1216,7 @@ static ctap_request_result_t ctap_get_assertion(const uint8_t* request, int leng
      * user has proven his identity (See 5.2, point 7).
      */
     _get_assertion_init_state(&GA);
-    workflow_stack_start_workflow(_get_assertion_confirm(&GA.rp));
+    workflow_stack_start_workflow(workflow_unlock(_get_assertion_unlock_cb, NULL));
     result.request_completed = false;
     _state.blocking_op = CTAP_BLOCKING_OP_GET_ASSERTION;
     return result;
@@ -1277,7 +1292,19 @@ static ctap_request_result_t _get_assertion_continue(uint8_t* out_data, size_t* 
         case CTAP_GET_ASSERTION_FAILED:
             result.status = CTAP2_ERR_OPERATION_DENIED;
             return result;
+        case CTAP_GET_ASSERTION_UNLOCKED:
+            /*
+            * Request permission to the user.
+            * This must be done before checking for excluded credentials etc.
+            * so that we don't reveal the existance of credentials without
+            * the user's consent.
+            */
+            workflow_stack_start_workflow(_get_assertion_confirm(&_state.data.get_assertion.req.rp));
+            state->state = CTAP_MAKE_CREDENTIAL_WAIT_CONFIRM;
+            result.request_completed = false;
+            return result;
         case CTAP_GET_ASSERTION_STARTED:
+        case CTAP_GET_ASSERTION_WAIT_CONFIRM:
             result.request_completed = false;
             return result;
         default:
