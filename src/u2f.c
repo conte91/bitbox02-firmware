@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <driver_init.h>
 #include <fido2/ctap.h>
 #include <fido2/ctap_errors.h>
 #include <fido2/device.h>
