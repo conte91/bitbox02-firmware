@@ -48,4 +48,6 @@ async_op_result_t u2f_app_confirm_retry(enum u2f_app_confirm_t type, const uint8
  */
 void u2f_app_confirm_finish(void);
 
+void u2f_app_confirm_abort(void);
+
 #endif

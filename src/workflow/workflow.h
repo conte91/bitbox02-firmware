@@ -88,4 +88,7 @@ workflow_t* workflow_allocate(
  */
 void workflow_destroy(workflow_t* workflow);
 
+/** This method should be called by a workflow to exit and destroy itself. */
+void workflow_exit(workflow_t* self);
+
 #endif
