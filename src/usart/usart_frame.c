@@ -268,7 +268,7 @@ static size_t n_pushed = 0;
 #define USART_FRAME_PUSH_BYTE(x)                         \
     do {                                                 \
         uint8_t to_push = x;                             \
-        queue_error_t res = queue_push(queue, &to_push); \
+        queue_error_t res = queue_push_retry(queue, &to_push); \
         if (res != QUEUE_ERR_NONE) {                     \
             return res;                                  \
         }                                                \
@@ -295,7 +295,7 @@ static queue_error_t _usart_encode_push_byte(uint8_t b, struct queue* queue)
         }                                                      \
     } while (0)
 
-queue_error_t usart_format_frame(
+void usart_format_frame(
     uint8_t src_endpoint,
     const uint8_t* data,
     uint32_t len,
