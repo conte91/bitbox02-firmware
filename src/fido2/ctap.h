@@ -412,7 +412,14 @@ typedef struct
 
 void ctap_response_init(CTAP_RESPONSE * resp);
 
-uint8_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
+typedef struct {
+    /** Whether the request has been completed (and a response should be sent immediately). */
+    bool request_completed;
+    /** Response status code. Only valid if request_completed is true. */
+    uint8_t status;
+} ctap_request_result_t;
+
+ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, size_t* out_len);
 
 // Encodes R,S signature to 2 der sequence of two integers.  Sigder must be at least 72 bytes.
 // @return length of der signature
@@ -461,5 +468,4 @@ void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t 
  * Indicates if the authenticator data has extensions.
  */
 #define CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED (1 << 7)
-
 #endif // _CTAP_H

@@ -31,6 +31,29 @@
 #include <workflow/status.h>
 #include <workflow/unlock.h>
 
+#define check_ret_or_exit(r) \
+    do { \
+        if ((r) != CborNoError) { \
+            ctap_request_result_t _res = { \
+                .status = r, \
+                .request_completed = true \
+            };                            \
+            return _res; \
+        } \
+    } while(0);
+
+#define check_cbor_or_exit(r) \
+    do { \
+        if ((r) != CborNoError) { \
+            ctap_request_result_t _res = { \
+                .status = CTAP2_ERR_CBOR_PARSING, \
+                .request_completed = true \
+            };                             \
+            return _res; \
+        } \
+    } while(0);
+
+
 static uint8_t ctap_get_info(CborEncoder * encoder)
 {
     int ret;
@@ -506,14 +529,17 @@ static bool _ask_generic_authorization(void) {
         );
 }
 
-static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
+static ctap_request_result_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
     CTAP_makeCredential MC;
     int ret;
+
+    ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     ret = ctap_parse_make_credential(&MC,encoder, request, length);
 
     if (ret != 0) {
-        return ret;
+        result.status = ret;
+        return result;
     }
     if (MC.pinAuthEmpty) {
         /*
@@ -521,20 +547,24 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * The client is asking us if we support pin
          * (and asks to check for user presence before we move on).
          */
-        bool result = _ask_generic_authorization();
-        if (!result) {
-            return CTAP2_ERR_OPERATION_DENIED;
+        bool auth_result = _ask_generic_authorization();
+        if (!auth_result) {
+            result.status = CTAP2_ERR_OPERATION_DENIED;
+            return result;
         }
         /* We don't support PIN semantics. */
-        return CTAP2_ERR_PIN_NOT_SET;
+        result.status = CTAP2_ERR_PIN_NOT_SET;
+        return result;
     }
     if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask) {
-        return CTAP2_ERR_MISSING_PARAMETER;
+        result.status = CTAP2_ERR_MISSING_PARAMETER;
+        return result;
     }
 
     if (MC.pinAuthPresent) {
         /* We don't support pinAuth. */
-        return CTAP2_ERR_PIN_AUTH_INVALID;
+        result.status = CTAP2_ERR_PIN_AUTH_INVALID;
+        return result;
     }
 
     if (MC.up == 1 || MC.up == 0) {
@@ -542,7 +572,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * The UP flag can't be set for authenticatorMakeCredential.
          * It must always be unset (0xFF).
          */
-        return CTAP2_ERR_INVALID_OPTION;
+        result.status = CTAP2_ERR_INVALID_OPTION;
+        return result;
     }
 
     if (!workflow_unlock()) {
@@ -551,7 +582,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * Let's count this as a "user denied" error.
          */
         workflow_status_create("Operation cancelled", false);
-        return CTAP2_ERR_OPERATION_DENIED;
+        result.status = CTAP2_ERR_OPERATION_DENIED;
+        return result;
     }
 
     /*
@@ -562,7 +594,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      */
     if (!_allow_make_credential(&MC)) {
         workflow_status_create("Operation cancelled", false);
-        return CTAP2_ERR_OPERATION_DENIED;
+        result.status = CTAP2_ERR_OPERATION_DENIED;
+        return result;
     }
 
     /*
@@ -572,13 +605,14 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      * us creating more than one credential for the same user/device pair.
      */
     ret = _verify_exclude_list(&MC);
-    check_ret(ret);
+    check_cbor_or_exit(ret);
 
     /* Update the U2F counter. */
     uint32_t u2f_counter;
     if (!securechip_u2f_counter_inc(&u2f_counter)) {
         workflow_status_create("Failed to create key.", false);
-        return CTAP2_ERR_OPERATION_DENIED;
+        result.status = CTAP2_ERR_OPERATION_DENIED;
+        return result;
     }
 
     ctap_auth_data_t auth_data;
@@ -617,7 +651,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             /* We can't store such a big user ID.
              * But we can't even truncate it... So nothing we can do, alas.
              */
-            return CTAP2_ERR_REQUEST_TOO_LARGE;
+            result.status = CTAP2_ERR_REQUEST_TOO_LARGE;
+            return result;
         }
         //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
         //MC.credInfo.user.id_size,
@@ -656,12 +691,14 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         }
         if (!free_spot_found) {
             workflow_status_create("Out of memory for resident keys", false);
-            return CTAP2_ERR_KEY_STORE_FULL;
+            result.status = CTAP2_ERR_KEY_STORE_FULL;
+            return result;
         }
         if (must_overwrite) {
             if (!_confirm_overwrite_credential()) {
                 workflow_status_create("Operation cancelled", false);
-                return CTAP2_ERR_OPERATION_DENIED;
+                result.status = CTAP2_ERR_OPERATION_DENIED;
+                return result;
             }
         }
         memory_store_ctap_resident_key(store_location, &rk_to_store);
@@ -680,7 +717,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      */
     CborEncoder attest_obj;
     ret = cbor_encoder_create_map(encoder, &attest_obj, 3);
-    check_ret(ret);
+    check_cbor_or_exit(ret);
 
     /*
      * First comes the Authenticator Data.
@@ -702,7 +739,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     uint8_t* cose_key_buf = auth_data.other;
     cbor_encoder_init(&cose_key, cose_key_buf, sizeof(auth_data.other), 0);
     ret = ctap_add_cose_key(&cose_key, pubkey, pubkey + 32, COSE_ALG_ES256);
-    check_retr(ret);
+    check_ret_or_exit(ret);
     size_t cose_key_len = cbor_encoder_get_buffer_size(&cose_key, cose_key_buf);
     size_t actual_auth_data_len = sizeof(auth_data) - sizeof(auth_data.other) + cose_key_len;
 
@@ -716,35 +753,37 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      */
     {
         ret = cbor_encode_int(&attest_obj, RESP_fmt);
-        check_ret(ret);
+        check_cbor_or_exit(ret);
         ret = cbor_encode_text_stringz(&attest_obj, "packed");
-        check_ret(ret);
+        check_cbor_or_exit(ret);
     }
 
 
     {
         ret = cbor_encode_int(&attest_obj, RESP_authData);
-        check_ret(ret);
+        check_cbor_or_exit(ret);
         ret = cbor_encode_byte_string(&attest_obj, (uint8_t*)&auth_data, actual_auth_data_len);
-        check_ret(ret);
+        check_cbor_or_exit(ret);
     }
 
     /* Compute the attestation statement. */
     uint8_t sigbuf[32];
     bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, MC.clientDataHash, sigbuf);
     if (!sig_success) {
-        return CTAP1_ERR_OTHER;
+        result.status = CTAP1_ERR_OTHER;
+        return result;
     }
     uint8_t attest_signature[72];
     int attest_sig_size = _encode_der_sig(sigbuf, attest_signature);
 
     ret = _add_attest_statement(&attest_obj, attest_signature, attest_sig_size);
-    check_retr(ret);
+    check_ret_or_exit(ret);
 
     ret = cbor_encoder_close_container(encoder, &attest_obj);
-    check_ret(ret);
+    check_cbor_or_exit(ret);
     workflow_status_create("Registration\ncompleted.", true);
-    return CTAP1_ERR_SUCCESS;
+    result.status = CTAP1_ERR_SUCCESS;
+    return result;
 }
 
 static uint8_t ctap_add_credential_descriptor(CborEncoder* map, u2f_keyhandle_t* key_handle)
@@ -1036,32 +1075,40 @@ static uint8_t _make_authentication_response(CTAP_getAssertion* GA, uint8_t* aut
     return CTAP1_ERR_SUCCESS;
 }
 
-static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request, int length)
+static ctap_request_result_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request, int length)
 {
     CTAP_getAssertion GA;
+
+    ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     uint8_t auth_data_buf[sizeof(ctap_auth_data_header_t) + 80];
     int ret = ctap_parse_get_assertion(&GA, request, length);
 
+
     if (ret != 0) {
-        return ret;
+        result.status = ret;
+        return result;
     }
 
     if (GA.pinAuthEmpty) {
-        bool result = _ask_generic_authorization();
-        if (!result) {
-            return CTAP2_ERR_OPERATION_DENIED;
+        bool auth_result = _ask_generic_authorization();
+        if (!auth_result) {
+            result.status = CTAP2_ERR_OPERATION_DENIED;
+            return result;
         }
-        return CTAP2_ERR_PIN_NOT_SET;
+        result.status = CTAP2_ERR_PIN_NOT_SET;
+        return result;
     }
     if (GA.pinAuthPresent) {
         /* We don't support pinAuth. */
-        return CTAP2_ERR_PIN_AUTH_INVALID;
+        result.status = CTAP2_ERR_PIN_AUTH_INVALID;
+        return result;
     }
 
     if (!GA.rp.size || !GA.clientDataHashPresent) {
         /* Both parameters are mandatory. */
-        return CTAP2_ERR_MISSING_PARAMETER;
+        result.status = CTAP2_ERR_MISSING_PARAMETER;
+        return result;
     }
 
 
@@ -1072,7 +1119,8 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
      * user has proven his identity (See 5.2, point 7).
      */
     if (!ctap_confirm_authentication(&GA.rp, GA.up, GA.uv)) {
-        return CTAP2_ERR_OPERATION_DENIED;
+        result.status = CTAP2_ERR_OPERATION_DENIED;
+        return result;
     }
 
     u2f_keyhandle_t auth_credential;
@@ -1092,7 +1140,8 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
         _authenticate_with_allow_list(&GA, &chosen_credential, auth_privkey);
         if (!chosen_credential) {
             /* No credential selected (or no credential was known to the device). */
-            return CTAP2_ERR_NO_CREDENTIALS;
+            result.status = CTAP2_ERR_NO_CREDENTIALS;
+            return result;
         }
         //screen_print_debug("Used allow key\n", 500);
         memcpy(&auth_credential, chosen_credential, sizeof(auth_credential));
@@ -1100,7 +1149,8 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
         // No allowList, so use all matching RK's matching rpId
         uint8_t auth_status = _authenticate_with_rk(&GA, &auth_credential, auth_privkey, user_id, &user_id_size);
         if (auth_status != 0) {
-            return auth_status;
+            result.status = auth_status;
+            return result;
         }
         //screen_print_debug("Retrieved key\n", 500);
         //uint8_t* cred_raw = (uint8_t*)&auth_credential;
@@ -1111,16 +1161,17 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
 
     size_t actual_auth_data_size;
     ret = _make_authentication_response(&GA, auth_data_buf, &actual_auth_data_size);
-    check_ret(ret);
+    check_ret_or_exit(ret);
 
     ret = ctap_end_get_assertion(encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, GA.clientDataHash, user_id, user_id_size);
     //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
     //user_id_size,
     //user_id[0], user_id[user_id_size - 1]);
-    check_ret(ret);
+    check_ret_or_exit(ret);
 
     workflow_status_create("Authentication\ncompleted.", true);
-    return 0;
+    result.status = 0;
+    return result;
 }
 
 void ctap_response_init(CTAP_RESPONSE * resp)
@@ -1129,11 +1180,10 @@ void ctap_response_init(CTAP_RESPONSE * resp)
     resp->data_size = CTAP_RESPONSE_BUFFER_SIZE;
 }
 
-uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, size_t* out_len)
+ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, size_t* out_len)
 {
     CborEncoder encoder;
     memset(&encoder,0,sizeof(CborEncoder));
-    uint8_t status = 0;
     uint8_t cmd = *pkt_raw;
     pkt_raw++;
     length--;
@@ -1141,49 +1191,43 @@ uint8_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, siz
     uint8_t* buf = out_data;
 
     cbor_encoder_init(&encoder, buf, USB_DATA_MAX_LEN, 0);
-
+    ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     switch(cmd)
     {
         case CTAP_MAKE_CREDENTIAL:
-            status = ctap_make_credential(&encoder, pkt_raw, length);
-
+            result = ctap_make_credential(&encoder, pkt_raw, length);
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-
             break;
         case CTAP_GET_ASSERTION:
-            status = ctap_get_assertion(&encoder, pkt_raw, length);
-
+            result = ctap_get_assertion(&encoder, pkt_raw, length);
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-
             break;
         case CTAP_CANCEL:
             break;
         case CTAP_GET_INFO:
-            status = ctap_get_info(&encoder);
-
+            result.status = ctap_get_info(&encoder);
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
-
             break;
         case CTAP_CLIENT_PIN:
-            status = CTAP2_ERR_NOT_ALLOWED;
+            result.status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case CTAP_RESET:
-            status = CTAP2_ERR_NOT_ALLOWED;
+            result.status = CTAP2_ERR_NOT_ALLOWED;
             break;
         case GET_NEXT_ASSERTION:
-            status = CTAP2_ERR_NOT_ALLOWED;
+            result.status = CTAP2_ERR_NOT_ALLOWED;
             break;
         default:
-            status = CTAP1_ERR_INVALID_COMMAND;
+            result.status = CTAP1_ERR_INVALID_COMMAND;
     }
 
-    if (status != CTAP1_ERR_SUCCESS)
+    if (result.status != CTAP1_ERR_SUCCESS)
     {
         *out_len = 0;
     }
 
 
-    return status;
+    return result;
 }
 
