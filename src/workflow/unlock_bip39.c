@@ -18,6 +18,63 @@
 #include "get_mnemonic_passphrase.h"
 #include "workflow.h"
 
+#define TIMEOUT_TICK_PERIOD_MS 100
+
+#if !defined(TESTING)
+static struct timer_task _animation_timer_task = {0};
+static int _animation_timer_count = 0;
+
+/** ~3800ms unlock time, measured using this timer. */
+#define UNLOCK_TIME_TICKS (38)
+
+/**
+ * Displays a closed lock at start (0ms),
+ * followed by an open lock after 600ms.
+ */
+static void _animation_timer_cb(const struct timer_task* const timer_task)
+{
+    (void)timer_task;
+    if (_animation_timer_count == UNLOCK_TIME_TICKS ) {
+        /* End of the animation */
+        return;
+    }
+
+    UG_ClearBuffer();
+    if (_animation_timer_count < (UNLOCK_TIME_TICKS / 2)) {
+        image_lock(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 1, IMAGE_DEFAULT_LOCK_RADIUS);
+    } else {
+        image_unlock(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 1, IMAGE_DEFAULT_LOCK_RADIUS);
+    }
+
+    /* Progress bar */
+    const uint16_t bar_height = 5;
+    UG_FillFrame(0, SCREEN_HEIGHT - bar_height, (SCREEN_WIDTH * _animation_timer_count / UNLOCK_TIME_TICKS), SCREEN_HEIGHT, C_WHITE);
+    UG_SendBuffer();
+    _animation_timer_count++;
+}
+
+/**
+ * Sets up a timer animating a lock icon every 100ms
+ */
+static void _start_animation_timer(void)
+{
+    _animation_timer_task.interval = TIMEOUT_TICK_PERIOD_MS;
+    _animation_timer_task.cb = _animation_timer_cb;
+    _animation_timer_task.mode = TIMER_TASK_REPEAT;
+    timer_stop(&TIMER_0);
+    timer_add_task(&TIMER_0, &_animation_timer_task);
+    _animation_timer_count = 0;
+    timer_start(&TIMER_0);
+}
+
+static void _stop_animation_timer(void)
+{
+    timer_stop(&TIMER_0);
+    timer_remove_task(&TIMER_0, &_animation_timer_task);
+    timer_start(&TIMER_0);
+}
+#endif
+
 typedef struct {
     /**
      * Buffer containing the generated mnemonic passphrase.
@@ -60,21 +117,16 @@ static void _unlock_bip39_init(workflow_t* self)
 static void _unlock_bip39_spin(workflow_t* self)
 {
     unlock_bip39_data_t* data = (unlock_bip39_data_t*)self->data;
-    { // animation
-        // Cannot render screens during unlocking (unlocking blocks)
-        // Therefore hardcode a status screen
-        UG_ClearBuffer();
-        image_lock(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 1, IMAGE_DEFAULT_LOCK_RADIUS);
-        UG_SendBuffer();
-#ifndef TESTING
-        delay_ms(1200);
-#endif
-        UG_ClearBuffer();
-        image_unlock(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 1, IMAGE_DEFAULT_LOCK_RADIUS);
-        UG_SendBuffer();
-    }
 
-    if (!keystore_unlock_bip39(data->mnemonic_passphrase)) {
+#ifndef TESTING
+    _start_animation_timer();
+#endif
+    bool unlock_result = keystore_unlock_bip39(data->mnemonic_passphrase);
+#ifndef TESTING
+    _stop_animation_timer();
+#endif
+
+    if (!unlock_result) {
         Abort("bip39 unlock failed");
     }
     if (data->callback) {
