@@ -548,7 +548,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
          * User didn't authenticate.
          * Let's count this as a "user denied" error.
          */
-        workflow_status_create("Operation cancelled", false);
+        workflow_status_blocking("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -559,7 +559,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
      * the user's consent.
      */
     if (!_allow_make_credential(&MC)) {
-        workflow_status_create("Operation cancelled", false);
+        workflow_status_blocking("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -575,7 +575,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
     /* Update the U2F counter. */
     uint32_t u2f_counter;
     if (!securechip_u2f_counter_inc(&u2f_counter)) {
-        workflow_status_create("Failed to create key.", false);
+        workflow_status_blocking("Failed to create key.", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -653,12 +653,12 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
             }
         }
         if (!free_spot_found) {
-            workflow_status_create("Out of memory for resident keys", false);
+            workflow_status_blocking("Out of memory for resident keys", false);
             return CTAP2_ERR_KEY_STORE_FULL;
         }
         if (must_overwrite) {
             if (!_confirm_overwrite_credential()) {
-                workflow_status_create("Operation cancelled", false);
+                workflow_status_blocking("Operation cancelled", false);
                 return CTAP2_ERR_OPERATION_DENIED;
             }
         }
@@ -741,7 +741,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 
     ret = cbor_encoder_close_container(encoder, &attest_obj);
     check_ret(ret);
-    workflow_status_create("Registration\ncompleted.", true);
+    workflow_status_blocking("Registration\ncompleted.", true);
     return CTAP1_ERR_SUCCESS;
 }
 
@@ -961,7 +961,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
         }
     }
     if (creds.n_elems == 0) {
-        workflow_status_create("No credentials found on this device.", false);
+        workflow_status_blocking("No credentials found on this device.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     /* Sort credentials by creation time. */
@@ -969,7 +969,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
     int selected_cred = workflow_select_ctap_credential(&creds);
     if (selected_cred < 0) {
         /* User aborted. */
-        workflow_status_create("Operation cancelled", false);
+        workflow_status_blocking("Operation cancelled", false);
         return CTAP2_ERR_OPERATION_DENIED;
     }
 
@@ -980,14 +980,14 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
 
     if (!mem_result) {
         /* Shouldn't happen, but if it does we effectively don't have any valid credential to provide. */
-        workflow_status_create("Internal error. Operation cancelled", false);
+        workflow_status_blocking("Internal error. Operation cancelled", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     /* Sanity check the stored credential. */
     if (selected_key.valid != CTAP_RESIDENT_KEY_VALID ||
         selected_key.user_id_size > CTAP_USER_ID_MAX_SIZE) {
         //screen_sprintf_debug(1000, "BAD valid %d", selected_key.valid);
-        workflow_status_create("Internal error. Invalid key selected.", false);
+        workflow_status_blocking("Internal error. Invalid key selected.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     memcpy(chosen_credential_out, &selected_key.key_handle, sizeof(selected_key.key_handle));
@@ -997,7 +997,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
     /* Sanity check the key and extract the private key. */
     bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)chosen_credential_out, sizeof(*chosen_credential_out), chosen_privkey);
     if (!key_valid) {
-        workflow_status_create("Internal error. Invalid key selected.", false);
+        workflow_status_blocking("Internal error. Invalid key selected.", false);
         return CTAP2_ERR_NO_CREDENTIALS;
     }
     return CTAP1_ERR_SUCCESS;
@@ -1117,7 +1117,7 @@ static uint8_t ctap_get_assertion(CborEncoder * encoder, const uint8_t* request,
     //user_id[0], user_id[user_id_size - 1]);
     check_ret(ret);
 
-    workflow_status_create("Authentication\ncompleted.", true);
+    workflow_status_blocking("Authentication\ncompleted.", true);
     return 0;
 }
 

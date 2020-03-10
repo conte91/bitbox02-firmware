@@ -44,38 +44,6 @@
 #define CTAP_VENDOR_FIRST           0x40
 #define CTAP_VENDOR_LAST            0xBF
 
-#define MC_clientDataHash         0x01
-#define MC_rp                     0x02
-#define MC_user                   0x03
-#define MC_pubKeyCredParams       0x04
-#define MC_excludeList            0x05
-#define MC_extensions             0x06
-#define MC_options                0x07
-#define MC_pinAuth                0x08
-#define MC_pinProtocol            0x09
-
-#define GA_rpId                   0x01
-#define GA_clientDataHash         0x02
-#define GA_allowList              0x03
-#define GA_extensions             0x04
-#define GA_options                0x05
-#define GA_pinAuth                0x06
-#define GA_pinProtocol            0x07
-
-#define CP_pinProtocol            0x01
-#define CP_subCommand             0x02
-    #define CP_cmdGetRetries      0x01
-    #define CP_cmdGetKeyAgreement 0x02
-    #define CP_cmdSetPin          0x03
-    #define CP_cmdChangePin       0x04
-    #define CP_cmdGetPinToken     0x05
-#define CP_keyAgreement           0x03
-#define CP_pinAuth                0x04
-#define CP_newPinEnc              0x05
-#define CP_pinHashEnc             0x06
-#define CP_getKeyAgreement        0x07
-#define CP_getRetries             0x08
-
 #define EXT_HMAC_SECRET_COSE_KEY    0x01
 #define EXT_HMAC_SECRET_SALT_ENC    0x02
 #define EXT_HMAC_SECRET_SALT_AUTH   0x03
@@ -433,12 +401,6 @@ int8_t ctap_load_key(uint8_t index, uint8_t * key);
 #define PIN_TOKEN_SIZE      16
 extern uint8_t PIN_TOKEN[PIN_TOKEN_SIZE];
 extern uint8_t KEY_AGREEMENT_PUB[64];
-
-void lock_device_permanently(void);
-
-void ctap_load_external_keys(uint8_t * keybytes);
-
-#include <screen.h>
 
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
 

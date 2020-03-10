@@ -19,6 +19,30 @@
 
 extern struct _getAssertionState getAssertionState;
 
+/**
+ * Field tags used in MakeCredential requests.
+ */
+#define MAKE_CREDENTIAL_TAG_CLIENT_DATA_HASH (0x01)
+#define MAKE_CREDENTIAL_TAG_RELYING_PARTY (0x02)
+#define MAKE_CREDENTIAL_TAG_USER (0x03)
+#define MAKE_CREDENTIAL_TAG_PUB_KEY_CRED_PARAMS (0x04)
+#define MAKE_CREDENTIAL_TAG_EXCLUDE_LIST (0x05)
+#define MAKE_CREDENTIAL_TAG_EXTENSIONS (0x06)
+#define MAKE_CREDENTIAL_TAG_OPTIONS (0x07)
+#define MAKE_CREDENTIAL_TAG_PIN_AUTH (0x08)
+#define MAKE_CREDENTIAL_TAG_PIN_PROTOCOL (0x09)
+
+/**
+ * Field tags used in MakeCredential requests.
+ */
+#define GA_rpId                   0x01
+#define GA_clientDataHash         0x02
+#define GA_allowList              0x03
+#define GA_extensions             0x04
+#define GA_options                0x05
+#define GA_pinAuth                0x06
+#define GA_pinProtocol            0x07
+
 const char * cbor_value_get_type_string(const CborValue *value)
 {
     switch(cbor_value_get_type(value))
@@ -784,7 +808,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
         switch(key)
         {
 
-            case MC_clientDataHash:
+            case MAKE_CREDENTIAL_TAG_CLIENT_DATA_HASH:
 
                 ret = _parse_fixed_byte_string(&map, MC->clientDataHash, CLIENT_DATA_HASH_SIZE);
                 if (ret == 0)
@@ -793,7 +817,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
                 }
 
                 break;
-            case MC_rp:
+            case MAKE_CREDENTIAL_TAG_RELYING_PARTY:
 
                 ret = _parse_rp(&MC->rp, &map);
                 if (ret == 0)
@@ -803,19 +827,19 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
 
 
                 break;
-            case MC_user:
+            case MAKE_CREDENTIAL_TAG_USER:
 
                 ret = _parse_user(MC, &map);
 
 
                 break;
-            case MC_pubKeyCredParams:
+            case MAKE_CREDENTIAL_TAG_PUB_KEY_CRED_PARAMS:
 
                 ret = _parse_pub_key_cred_params(MC, &map);
 
 
                 break;
-            case MC_excludeList:
+            case MAKE_CREDENTIAL_TAG_EXCLUDE_LIST:
                 ret = parse_verify_exclude_list(&map);
                 check_ret(ret);
 
@@ -827,7 +851,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
 
 
                 break;
-            case MC_extensions:
+            case MAKE_CREDENTIAL_TAG_EXTENSIONS:
                 type = cbor_value_get_type(&map);
                 if (type != CborMapType)
                 {
@@ -837,11 +861,11 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
                 check_retr(ret);
                 break;
 
-            case MC_options:
+            case MAKE_CREDENTIAL_TAG_OPTIONS:
                 ret = _parse_options(&map, &MC->credInfo.rk, &MC->uv, &MC->up);
                 check_retr(ret);
                 break;
-            case MC_pinAuth: {
+            case MAKE_CREDENTIAL_TAG_PIN_AUTH: {
 
                 size_t pinSize;
                 if (cbor_value_get_type(&map) == CborByteStringType &&
@@ -864,7 +888,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
                 MC->pinAuthPresent = 1;
                 break;
             }
-            case MC_pinProtocol:
+            case MAKE_CREDENTIAL_TAG_PIN_PROTOCOL:
                 if (cbor_value_get_type(&map) == CborIntegerType)
                 {
                     ret = cbor_value_get_int_checked(&map, &MC->pinProtocol);
