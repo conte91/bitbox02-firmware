@@ -34,16 +34,6 @@
 
 #include <usb/usb_packet.h>
 
-#define CTAP_MAKE_CREDENTIAL        0x01
-#define CTAP_GET_ASSERTION          0x02
-#define CTAP_CANCEL                 0x03
-#define CTAP_GET_INFO               0x04
-#define CTAP_CLIENT_PIN             0x06
-#define CTAP_RESET                  0x07
-#define GET_NEXT_ASSERTION          0x08
-#define CTAP_VENDOR_FIRST           0x40
-#define CTAP_VENDOR_LAST            0xBF
-
 #define EXT_HMAC_SECRET_COSE_KEY    0x01
 #define EXT_HMAC_SECRET_SALT_ENC    0x02
 #define EXT_HMAC_SECRET_SALT_AUTH   0x03
