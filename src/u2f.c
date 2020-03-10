@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #include "u2f.h"
-#include "u2f/u2f_app.h"
 
 #include <stdio.h>
 #include <string.h>
 
+#include <fido2/ctap.h>
+#include <fido2/ctap_errors.h>
 #include <hardfault.h>
 #include <keystore.h>
 #include <memory/memory.h>
 #include <random.h>
+#include <screen.h>
 #include <securechip/securechip.h>
 #include <ui/component.h>
 #include <ui/components/confirm.h>
 #include <ui/components/info_centered.h>
 #include <ui/screen_process.h>
 #include <ui/screen_stack.h>
+#include <u2f/u2f_app.h>
+#include <u2f/u2f_keyhandle.h>
 #include <usb/u2f/u2f.h>
 #include <usb/u2f/u2f_hid.h>
 #include <usb/u2f/u2f_keys.h>
@@ -49,7 +53,7 @@ typedef struct {
 #define U2F_TIMEOUT 500 // [msec]
 #define U2F_KEYHANDLE_LEN (U2F_NONCE_LENGTH + SHA256_LEN)
 
-#if (U2F_EC_KEY_SIZE != SHA256_LEN) || (U2F_EC_KEY_SIZE != U2F_NONCE_LENGTH)
+#if (U2F_EC_COORD_SIZE != SHA256_LEN) || (U2F_EC_COORD_SIZE != U2F_NONCE_LENGTH)
 #error "Incorrect macro values for u2f"
 #endif
 
@@ -212,46 +216,6 @@ static void _version(const USB_APDU* a, Packet* out_packet)
     _fill_message(version_response, sizeof(version_response), out_packet);
 }
 
-/**
- * Generates a key for the given app id, salted with the passed nonce.
- * @param[in] appId The app id of the RP which requests a registration or authentication process.
- * @param[in] nonce A random nonce with which the seed for the private key is salted.
- * @param[out] privkey The generated private key. Size must be HMAC_SHA256_LEN.
- * @param[out] mac The message authentication code for the private key. Size must be
- * HMAC_SHA256_LEN.
- */
-USE_RESULT static bool _keyhandle_gen(
-    const uint8_t* appId,
-    uint8_t* nonce,
-    uint8_t* privkey,
-    uint8_t* mac)
-{
-    uint8_t hmac_in[U2F_APPID_SIZE + U2F_NONCE_LENGTH];
-    uint8_t seed[32];
-    UTIL_CLEANUP_32(seed);
-    if (!keystore_get_u2f_seed(seed)) {
-        return false;
-    }
-
-    // Concatenate AppId and Nonce as input for the first HMAC round
-    memcpy(hmac_in, appId, U2F_APPID_SIZE);
-    memcpy(hmac_in + U2F_APPID_SIZE, nonce, U2F_NONCE_LENGTH);
-    int res = wally_hmac_sha256(
-        seed, KEYSTORE_U2F_SEED_LENGTH, hmac_in, sizeof(hmac_in), privkey, HMAC_SHA256_LEN);
-    if (res != WALLY_OK) {
-        return false;
-    }
-
-    // Concatenate AppId and privkey for the second HMAC round
-    memcpy(hmac_in + U2F_APPID_SIZE, privkey, HMAC_SHA256_LEN);
-    res = wally_hmac_sha256(
-        seed, KEYSTORE_U2F_SEED_LENGTH, hmac_in, sizeof(hmac_in), mac, HMAC_SHA256_LEN);
-    if (res != WALLY_OK) {
-        return false;
-    }
-    return true;
-}
-
 static int _sig_to_der(const uint8_t* sig, uint8_t* der)
 {
     int i;
@@ -318,7 +282,7 @@ static int _sig_to_der(const uint8_t* sig, uint8_t* der)
  */
 static void _register(const USB_APDU* apdu, Packet* out_packet)
 {
-    uint8_t privkey[U2F_EC_KEY_SIZE] = {0};
+    uint8_t privkey[U2F_EC_COORD_SIZE] = {0};
     uint8_t nonce[U2F_NONCE_LENGTH] = {0};
     uint8_t mac[HMAC_SHA256_LEN] = {0};
     uint8_t data[sizeof(U2F_REGISTER_RESP) + 2] = {0};
@@ -364,19 +328,10 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
     }
 
     // Generate keys until a valid one is found
-    int i = 0;
-    for (;; ++i) {
-        if (i == 10) {
-            _error(U2F_SW_CONDITIONS_NOT_SATISFIED, out_packet);
-            return;
-        }
-        random_32_bytes(nonce);
-        if (!_keyhandle_gen(reg_request->appId, nonce, privkey, mac)) {
-            continue;
-        }
-        if (securechip_ecc_generate_public_key(privkey, (uint8_t*)&response->pubKey.x)) {
-            break;
-        }
+    bool key_create_success = u2f_keyhandle_create_key(reg_request->appId, nonce, privkey, mac, (uint8_t*)&response->pubKey.x);
+    if (!key_create_success) {
+        _error(U2F_SW_CONDITIONS_NOT_SATISFIED, out_packet);
+        return;
     }
 
     response->pubKey.format = U2F_UNCOMPRESSED_POINT;
@@ -386,7 +341,7 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
 
     memcpy(response->keyHandleCertSig, mac, sizeof(mac));
     memcpy(response->keyHandleCertSig + sizeof(mac), nonce, sizeof(nonce));
-    memcpy(response->keyHandleCertSig + response->keyHandleLen, U2F_ATT_CERT, sizeof(U2F_ATT_CERT));
+    memcpy(response->keyHandleCertSig + response->keyHandleLen, U2F_ATT_CERT, U2F_ATT_CERT_SIZE);
 
     // Add signature using attestation key
     sig_base.reserved = 0;
@@ -403,9 +358,9 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
         return;
     }
 
-    uint8_t* resp_sig = response->keyHandleCertSig + response->keyHandleLen + sizeof(U2F_ATT_CERT);
+    uint8_t* resp_sig = response->keyHandleCertSig + response->keyHandleLen + U2F_ATT_CERT_SIZE;
     int der_len = _sig_to_der(sig, resp_sig);
-    size_t kh_cert_sig_len = response->keyHandleLen + sizeof(U2F_ATT_CERT) + der_len;
+    size_t kh_cert_sig_len = response->keyHandleLen + U2F_ATT_CERT_SIZE + der_len;
 
     // Append success bytes
     memcpy(response->keyHandleCertSig + kh_cert_sig_len, "\x90\x00", 2);
@@ -417,9 +372,7 @@ static void _register(const USB_APDU* apdu, Packet* out_packet)
 
 static void _authenticate(const USB_APDU* apdu, Packet* out_packet)
 {
-    uint8_t privkey[U2F_EC_KEY_SIZE];
-    uint8_t nonce[U2F_NONCE_LENGTH];
-    uint8_t mac[HMAC_SHA256_LEN];
+    uint8_t privkey[U2F_EC_COORD_SIZE];
     uint8_t sig[64] = {0};
     U2F_AUTHENTICATE_SIG_STR sig_base;
 
@@ -443,12 +396,10 @@ static void _authenticate(const USB_APDU* apdu, Packet* out_packet)
         return;
     }
 
-    memcpy(nonce, auth_request->keyHandle + sizeof(mac), sizeof(nonce));
-    if (!_keyhandle_gen(auth_request->appId, nonce, privkey, mac)) {
-        _error(U2F_SW_WRONG_DATA, out_packet);
-        return;
-    }
-    if (!MEMEQ(auth_request->keyHandle, mac, SHA256_LEN)) {
+    /* Decode the key handle into a private key. */
+    bool key_is_valid = u2f_keyhandle_verify(
+        auth_request->appId, auth_request->keyHandle, auth_request->keyHandleLength, privkey);
+    if (!key_is_valid) {
         _error(U2F_SW_WRONG_DATA, out_packet);
         return;
     }
@@ -587,7 +538,7 @@ static void _cmd_init(const Packet* in_packet, Packet* out_packet, const size_t 
     response.versionMajor = DIGITAL_BITBOX_VERSION_MAJOR;
     response.versionMinor = DIGITAL_BITBOX_VERSION_MINOR;
     response.versionBuild = DIGITAL_BITBOX_VERSION_PATCH;
-    response.capFlags = U2FHID_CAPFLAG_WINK;
+    response.capFlags = U2FHID_CAPFLAG_WINK | U2FHID_CAPFLAG_CBOR;
     util_zero(out_packet->data_addr, sizeof(out_packet->data_addr));
     memcpy(out_packet->data_addr, &response, sizeof(response));
 }
@@ -634,6 +585,27 @@ static void _cmd_msg(const Packet* in_packet, Packet* out_packet, const size_t m
     }
 }
 
+static void _cmd_cbor(const Packet* in_packet, Packet* out_packet, const size_t max_out_len) {
+    (void)max_out_len;
+    printf("CTAPHID_CBOR");
+
+    if (in_packet->len == 0)
+    {
+        printf("Error,invalid 0 length field for cbor packet\n");
+        _error_hid(in_packet->cid, U2FHID_ERR_INVALID_LEN, out_packet);
+        return;
+    }
+    uint8_t status = ctap_request(in_packet->data_addr, in_packet->len, out_packet->data_addr + 1, &out_packet->len);
+    if (status != CTAP1_ERR_SUCCESS) {
+        printf("CBOR error: %d\n", status);
+        _error_hid(in_packet->cid, status, out_packet);
+        return;
+    }
+    out_packet->data_addr[0] = status;
+    out_packet->len++;
+    printf("CBOR success\n");
+}
+
 bool u2f_blocking_request_can_go_through(const Packet* in_packet)
 {
     if (!_state.locked) {
@@ -671,6 +643,7 @@ void u2f_device_setup(void)
         {U2FHID_WINK, _cmd_wink},
         {U2FHID_INIT, _cmd_init},
         {U2FHID_MSG, _cmd_msg},
+        {U2FHID_CBOR, _cmd_cbor},
     };
     usb_processing_register_cmds(
         usb_processing_u2f(), u2f_cmd_callbacks, sizeof(u2f_cmd_callbacks) / sizeof(CMD_Callback));
