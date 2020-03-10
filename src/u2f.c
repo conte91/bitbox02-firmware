@@ -847,7 +847,7 @@ static void _abort_register(void)
         _clear_state();
         break;
     case U2F_REGISTER_WAIT_REFRESH:
-        _remove_refresh_webpage_screen();
+        _stop_refresh_webpage_screen();
         _clear_state();
         break;
     default:
@@ -901,7 +901,7 @@ static void _abort_authenticate(void)
         _clear_state();
         break;
     case U2F_AUTHENTICATE_WAIT_REFRESH:
-        _remove_refresh_webpage_screen();
+        _stop_refresh_webpage_screen();
         _clear_state();
         break;
     default:

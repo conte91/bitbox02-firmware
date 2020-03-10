@@ -8,10 +8,12 @@
 #include <ui/components/ui_images.h>
 #include <ui/ugui/ugui.h>
 #include <ui/workflow_stack.h>
+#include <usb/usb_processing.h>
 #include <util.h>
 
 #ifndef TESTING
-#include <hal_delay.h>
+#include <hal_timer.h>
+extern struct timer_descriptor TIMER_0;
 #endif
 
 #include "blocking.h"
@@ -34,6 +36,7 @@ static int _animation_timer_count = 0;
 static void _animation_timer_cb(const struct timer_task* const timer_task)
 {
     (void)timer_task;
+	usb_processing_background_process();
     if (_animation_timer_count == UNLOCK_TIME_TICKS ) {
         /* End of the animation */
         return;

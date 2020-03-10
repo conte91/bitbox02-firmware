@@ -69,6 +69,8 @@ void usb_processing_init(void);
 void usb_processing_lock(struct usb_processing* ctx);
 
 void usb_processing_unlock(void);
+
+void usb_processing_background_process(void);
 #endif
 
 #endif

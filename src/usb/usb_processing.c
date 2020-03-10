@@ -48,6 +48,7 @@ struct usb_processing {
     uint32_t registered_cmds_len;
     /* Whether the content of in_packet is a new, complete incoming packet. */
     bool has_packet;
+    bool processing_packet;
     struct queue* (*out_queue)(void);
     void (*send)(void);
     usb_frame_formatter_t format_frame;
@@ -240,6 +241,7 @@ static void _usb_processing_drop_received(struct usb_processing* ctx)
  */
 static void _usb_execute_packet(struct usb_processing* ctx, const Packet* in_packet)
 {
+	ctx->processing_packet = true;
     bool cmd_valid = false;
     for (uint32_t i = 0; i < ctx->registered_cmds_len; i++) {
         if (in_packet->cmd == ctx->registered_cmds[i].cmd) {
@@ -257,9 +259,18 @@ static void _usb_execute_packet(struct usb_processing* ctx, const Packet* in_pac
     if (!cmd_valid) {
         ctx->manage_invalid_endpoint(ctx->out_queue(), _usb_state.in_packet.cid);
     }
+	ctx->processing_packet = false;
 }
 
 #if !defined(BOOTLOADER)
+static void _drop_blocked_packet(struct usb_processing* ctx, const Packet* in_packet)
+{
+        Packet out_packet;
+        _prepare_out_packet(in_packet, &out_packet);
+        ctx->create_blocked_req_error(&out_packet, in_packet);
+        _enqueue_frames(ctx, &out_packet);
+}
+
 /**
  * Processes an incoming packet. If the packet cannot be processed,
  * send an error response.
@@ -286,10 +297,7 @@ static void _usb_arbitrate_packet(struct usb_processing* ctx, const Packet* in_p
 
     if (!can_go_through) {
         /* The receiving state should send back an error */
-        Packet out_packet;
-        _prepare_out_packet(in_packet, &out_packet);
-        ctx->create_blocked_req_error(&out_packet, in_packet);
-        _enqueue_frames(ctx, &out_packet);
+		_drop_blocked_packet(ctx, in_packet);
     } else {
         _usb_execute_packet(ctx, in_packet);
         /* New packet processed: reset the watchdog timeout. */
@@ -459,4 +467,32 @@ void usb_processing_unlock(void)
     }
     _usb_state.blocking_ctx = NULL;
 }
+
+static void _background_process(struct usb_processing* ctx)
+{
+	if (!ctx->has_packet) {
+		return;
+	}
+	if (ctx->processing_packet) {
+		/*
+		 * Allow calling this function from within the usb_processing_process stack.
+		 * FUTURE: Remove this hack when usb_processing_process doesn't create any
+		 * blocking calls anymore.
+		 */
+		_drop_blocked_packet(ctx, &_usb_state.in_packet);
+		return;
+	}
+	/*
+	 * We have a queued packet and we're running in a nonblocking context. Process the packet as usual.
+	 */
+	_usb_consume_incoming_packets(ctx);
+}
+
+void usb_processing_background_process(void) {
+	_background_process(usb_processing_hww());
+#if APP_U2F == 1
+	_background_process(usb_processing_u2f());
+#endif
+}
+
 #endif
