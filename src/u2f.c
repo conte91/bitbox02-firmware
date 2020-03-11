@@ -560,7 +560,7 @@ static void _cmd_init(const Packet* in_packet)
     response.versionMajor = DIGITAL_BITBOX_VERSION_MAJOR;
     response.versionMinor = DIGITAL_BITBOX_VERSION_MINOR;
     response.versionBuild = DIGITAL_BITBOX_VERSION_PATCH;
-    response.capFlags = U2FHID_CAPFLAG_WINK | U2FHID_CAPFLAG_CBOR;
+    response.capFlags = U2FHID_CAPFLAG_WINK;
     util_zero(out_packet.data_addr, sizeof(out_packet.data_addr));
     memcpy(out_packet.data_addr, &response, sizeof(response));
     usb_processing_send_packet(usb_processing_u2f(), &out_packet);
@@ -618,11 +618,6 @@ bool u2f_blocking_request_can_go_through(const Packet* in_packet)
 {
     if (!_state.locked) {
         Abort("USB stack thinks we're busy, but we're not.");
-    }
-
-    /* U2F keepalives should always be let through */
-    if (in_packet->cmd == U2FHID_KEEPALIVE || in_packet->cmd == U2FHID_CANCEL) {
-        return true;
     }
 
     if (!_state.allow_cmd_retries) {
