@@ -268,10 +268,7 @@ static size_t n_pushed = 0;
 #define USART_FRAME_PUSH_BYTE(x)                         \
     do {                                                 \
         uint8_t to_push = x;                             \
-        queue_error_t res = queue_push_retry(queue, &to_push); \
-        if (res != QUEUE_ERR_NONE) {                     \
-            return res;                                  \
-        }                                                \
+        queue_push_retry(queue, &to_push); \
         n_pushed++;                                      \
     } while (0)
 
