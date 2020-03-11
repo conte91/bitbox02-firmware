@@ -272,7 +272,7 @@ static size_t n_pushed = 0;
         n_pushed++;                                      \
     } while (0)
 
-static queue_error_t _usart_encode_push_byte(uint8_t b, struct queue* queue)
+static void _usart_encode_push_byte(uint8_t b, struct queue* queue)
 {
     if (b == USART_FRAME_FLAG_BYTE || b == USART_FRAME_ESCAPE_BYTE) {
         // Escape special framing bytes.
@@ -281,16 +281,7 @@ static queue_error_t _usart_encode_push_byte(uint8_t b, struct queue* queue)
     } else {
         USART_FRAME_PUSH_BYTE(b);
     }
-    return QUEUE_ERR_NONE;
 }
-
-#define USART_FRAME_PUSH_ENCODED_BYTE(x)                       \
-    do {                                                       \
-        queue_error_t res = _usart_encode_push_byte(x, queue); \
-        if (res != QUEUE_ERR_NONE) {                           \
-            return res;                                        \
-        }                                                      \
-    } while (0)
 
 void usart_format_frame(
     uint8_t src_endpoint,
@@ -302,15 +293,14 @@ void usart_format_frame(
     (void)cid;
     USART_FRAME_PUSH_BYTE(USART_FRAME_FLAG_BYTE);
     // Version == 0x01
-    USART_FRAME_PUSH_ENCODED_BYTE(0x01);
-    USART_FRAME_PUSH_ENCODED_BYTE(src_endpoint);
+    _usart_encode_push_byte(0x01, queue);
+    _usart_encode_push_byte(src_endpoint, queue);
     for (uint32_t i = 0; i < len; ++i) {
-        USART_FRAME_PUSH_ENCODED_BYTE(data[i]);
+        _usart_encode_push_byte(data[i], queue);
     }
     uint16_t cs = _compute_send_checksum(0x01, src_endpoint, data, len);
     uint8_t* cs_buf = (uint8_t*)&cs;
-    USART_FRAME_PUSH_ENCODED_BYTE(cs_buf[0]);
-    USART_FRAME_PUSH_ENCODED_BYTE(cs_buf[1]);
+    _usart_encode_push_byte(cs_buf[0], queue);
+    _usart_encode_push_byte(cs_buf[1], queue);
     USART_FRAME_PUSH_BYTE(USART_FRAME_FLAG_BYTE);
-    return QUEUE_ERR_NONE;
 }
