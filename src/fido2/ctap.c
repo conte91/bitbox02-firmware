@@ -661,7 +661,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
  *
  * @return CTAP status code.
  */
-static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
+
+static int _make_credential_complete(buffer_t* out_buf)
 {
     ctap_make_credential_state_t* state = &_state.data.make_cred;
     /*
@@ -782,7 +783,7 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
     CborEncoder encoder;
     CborEncoder attest_obj;
     memset(&encoder,0,sizeof(CborEncoder));
-    cbor_encoder_init(&encoder, out_data, USB_DATA_MAX_LEN, 0);
+    cbor_encoder_init(&encoder, out_buf->data, out_buf->max_len, 0);
     ret = cbor_encoder_create_map(&encoder, &attest_obj, 3);
     check_ret(ret);
 
@@ -852,11 +853,11 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
     ret = cbor_encoder_close_container(&encoder, &attest_obj);
     check_ret(ret);
     //workflow_status_create("Registration\ncompleted.", true);
-    *out_len = cbor_encoder_get_buffer_size(&encoder, out_data);
+    out_buf->len = cbor_encoder_get_buffer_size(&encoder, out_buf->data);
     return CTAP1_ERR_SUCCESS;
 }
 
-static ctap_request_result_t _make_credential_continue(uint8_t* out_data, size_t* out_len) {
+static ctap_request_result_t _make_credential_continue(buffer_t* out_buf) {
     ctap_request_result_t result = {.status = 0, .request_completed = true};
     ctap_make_credential_state_t* state = &_state.data.make_cred;
 
@@ -873,7 +874,7 @@ static ctap_request_result_t _make_credential_continue(uint8_t* out_data, size_t
             result.request_completed = false;
             return result;
         case CTAP_MAKE_CREDENTIAL_FINISHED:
-            result.status = _make_credential_complete(out_data, out_len);
+            result.status = _make_credential_complete(out_buf);
             return result;
         case CTAP_MAKE_CREDENTIAL_FAILED:
             workflow_status_blocking("Operation cancelled", false);
@@ -1233,7 +1234,7 @@ static uint8_t ctap_get_assertion(const uint8_t* data, int length)
  * Generates a new assertion in response to a GetAssertion request.
  * Only called when the user has already accepted and identified with the device.
  */
-static int _get_assertion_complete(uint8_t* out_data, size_t* out_len)
+static int _get_assertion_complete(buffer_t* out_buf)
 {
     ctap_get_assertion_state_t* state = &_state.data.get_assertion;
     u2f_keyhandle_t auth_credential;
@@ -1280,25 +1281,24 @@ static int _get_assertion_complete(uint8_t* out_data, size_t* out_len)
     /* Encode the resulting assertion in the output buffer. */
     CborEncoder encoder;
     memset(&encoder, 0, sizeof(CborEncoder));
-    cbor_encoder_init(&encoder, out_data, USB_DATA_MAX_LEN, 0);
+    cbor_encoder_init(&encoder, out_buf->data, out_buf->max_len, 0);
     ret = ctap_end_get_assertion(&encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, state->req.client_data_hash, user_id, user_id_size);
     if (ret != CborNoError) {
         return ret;
     }
 
-    *out_len = cbor_encoder_get_buffer_size(&encoder, out_data);
+    out_buf->len = cbor_encoder_get_buffer_size(&encoder, out_buf->data);
 
-    //workflow_status_blocking("Authentication\ncompleted.", true);
     return CTAP1_ERR_SUCCESS;
 }
 
-static ctap_request_result_t _get_assertion_continue(uint8_t* out_data, size_t* out_len)
+static ctap_request_result_t _get_assertion_continue(buffer_t* out_buf)
 {
     ctap_request_result_t result = {.status = 0, .request_completed = true};
     ctap_get_assertion_state_t* state = &_state.data.get_assertion;
     switch (state->state) {
         case CTAP_GET_ASSERTION_FINISHED:
-            result.status = _get_assertion_complete(out_data, out_len);
+            result.status = _get_assertion_complete(out_buf);
             return result;
         case CTAP_GET_ASSERTION_FAILED:
             result.status = CTAP2_ERR_OPERATION_DENIED;
@@ -1329,7 +1329,7 @@ void ctap_response_init(ctap_response_t* resp)
     resp->data_size = CTAP_RESPONSE_BUFFER_SIZE;
 }
 
-ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t* out_data, size_t* out_len)
+ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, buffer_t* out_buf)
 {
     CborEncoder encoder;
     memset(&encoder,0,sizeof(CborEncoder));
@@ -1337,9 +1337,7 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
     pkt_raw++;
     length--;
 
-    uint8_t* buf = out_data;
-
-    cbor_encoder_init(&encoder, buf, USB_DATA_MAX_LEN, 0);
+    cbor_encoder_init(&encoder, out_buf->data, out_buf->max_len, 0);
     ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     switch(cmd)
@@ -1363,7 +1361,7 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
             break;
         case CTAP_REQ_GET_INFO:
             result.status = ctap_get_info(&encoder);
-            *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
+            out_buf->len = cbor_encoder_get_buffer_size(&encoder, out_buf->data);
             break;
         case CTAP_REQ_CLIENT_PIN:
         case CTAP_REQ_RESET:
@@ -1375,25 +1373,25 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
     }
 
     if (result.status != CTAP1_ERR_SUCCESS || !result.request_completed) {
-        *out_len = 0;
+        out_buf->len = 0;
     }
     return result;
 }
 
-ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len)
+ctap_request_result_t ctap_retry(buffer_t* out_buf)
 {
     ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     switch (_state.blocking_op) {
         case CTAP_BLOCKING_OP_MAKE_CRED:
-            result = _make_credential_continue(out_data, out_len);
+            result = _make_credential_continue(out_buf);
             if (result.request_completed) {
                 _state.blocking_op = CTAP_BLOCKING_OP_NONE;
                 _make_credential_free_state();
             }
             break;
         case CTAP_BLOCKING_OP_GET_ASSERTION:
-            result = _get_assertion_continue(out_data, out_len);
+            result = _get_assertion_continue(out_buf);
             if (result.request_completed) {
                 _state.blocking_op = CTAP_BLOCKING_OP_NONE;
                 _get_assertion_free_state();

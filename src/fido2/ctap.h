@@ -10,6 +10,7 @@
 #include <crypto/sha2/sha256.h>
 #include <hardfault.h>
 #include <u2f/u2f_keyhandle.h>
+#include <util.h>
 
 #ifdef assert
 #undef assert
@@ -363,8 +364,8 @@ typedef struct {
 
 void ctap_response_init(ctap_response_t* resp);
 
-ctap_request_result_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
-ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len);
+ctap_request_result_t ctap_request(const uint8_t* pkt_raw, int length, buffer_t* out_buf);
+ctap_request_result_t ctap_retry(buffer_t* out_buf);
 
 // Run ctap related power-up procedures (init pinToken, generate shared secret)
 void ctap_init(void);
