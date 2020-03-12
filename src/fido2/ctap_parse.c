@@ -17,7 +17,12 @@
 
 #include <u2f/u2f_keyhandle.h>
 
-extern struct _getAssertionState getAssertionState;
+#define check_retr(r) \
+    do { \
+        if ((r) != CborNoError) { \
+            return r; \
+        } \
+    } while(0);
 
 /**
  * Field tags used in MakeCredential requests.
@@ -35,62 +40,13 @@ extern struct _getAssertionState getAssertionState;
 /**
  * Field tags used in MakeCredential requests.
  */
-#define GA_rpId                   0x01
-#define GA_clientDataHash         0x02
-#define GA_allowList              0x03
-#define GA_extensions             0x04
-#define GA_options                0x05
-#define GA_pinAuth                0x06
-#define GA_pinProtocol            0x07
-
-const char * cbor_value_get_type_string(const CborValue *value)
-{
-    switch(cbor_value_get_type(value))
-    {
-        case CborIntegerType:
-            return "CborIntegerType";
-            break;
-        case CborByteStringType:
-            return "CborByteStringType";
-            break;
-        case CborTextStringType:
-            return "CborTextStringType";
-            break;
-        case CborArrayType:
-            return "CborArrayType";
-            break;
-        case CborMapType:
-            return "CborMapType";
-            break;
-        case CborTagType:
-            return "CborTagType";
-            break;
-        case CborSimpleType:
-            return "CborSimpleType";
-            break;
-        case CborBooleanType:
-            return "CborBooleanType";
-            break;
-        case CborNullType:
-            return "CborNullType";
-            break;
-        case CborUndefinedType:
-            return "CborUndefinedType";
-            break;
-        case CborHalfFloatType:
-            return "CborHalfFloatType";
-            break;
-        case CborFloatType:
-            return "CborFloatType";
-            break;
-        case CborDoubleType:
-            return "CborDoubleType";
-            break;
-        default:
-            return "Invalid type";
-    }
-}
-
+#define GET_ASSERTION_TAG_RPID (0x01)
+#define GET_ASSERTION_TAG_CLIENT_DATA_HASH (0x02)
+#define GET_ASSERTION_TAG_ALLOW_LIST (0x03)
+#define GET_ASSERTION_TAG_EXTENSIONS (0x04)
+#define GET_ASSERTION_TAG_OPTIONS (0x05)
+#define GET_ASSERTION_TAG_PIN_AUTH (0x06)
+#define GET_ASSERTION_TAG_PIN_PROTOCOL (0x07)
 
 static uint8_t _parse_user(CTAP_makeCredential * MC, CborValue * val)
 {
@@ -1065,34 +1021,34 @@ uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request
         switch(key)
         {
 
-            case GA_clientDataHash:
+            case GET_ASSERTION_TAG_CLIENT_DATA_HASH:
 
                 ret = _parse_fixed_byte_string(&map, GA->clientDataHash, CLIENT_DATA_HASH_SIZE);
                 check_retr(ret);
                 GA->clientDataHashPresent = 1;
 
                 break;
-            case GA_rpId:
+            case GET_ASSERTION_TAG_RPID:
 
                 ret = _parse_rp_id(&GA->rp, &map);
 
                 break;
-            case GA_allowList:
+            case GET_ASSERTION_TAG_ALLOW_LIST:
                 ret = parse_allow_list(GA, &map);
                 check_ret(ret);
                 GA->allowListPresent = 1;
 
                 break;
-            case GA_extensions:
+            case GET_ASSERTION_TAG_EXTENSIONS:
                 ret = ctap_parse_extensions(&map, &GA->extensions);
                 check_retr(ret);
                 break;
 
-            case GA_options:
+            case GET_ASSERTION_TAG_OPTIONS:
                 ret = _parse_options(&map, &GA->rk, &GA->uv, &GA->up);
                 check_retr(ret);
                 break;
-            case GA_pinAuth: {
+            case GET_ASSERTION_TAG_PIN_AUTH: {
 
                 size_t pinSize;
                 if (cbor_value_get_type(&map) == CborByteStringType &&
@@ -1119,7 +1075,7 @@ uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request
 
                 break;
             }
-            case GA_pinProtocol:
+            case GET_ASSERTION_TAG_PIN_PROTOCOL:
                 if (cbor_value_get_type(&map) == CborIntegerType)
                 {
                     ret = cbor_value_get_int_checked(&map, &GA->pinProtocol);

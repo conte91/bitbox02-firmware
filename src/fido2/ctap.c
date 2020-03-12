@@ -523,7 +523,9 @@ static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
             /* Skip credentials that fail to parse. */
             continue;
         }
-        check_retr(ret);
+        if (ret != CborNoError) {
+            return ret;
+        }
 
         uint8_t privkey[HMAC_SHA256_LEN];
         UTIL_CLEANUP_32(privkey);
@@ -659,6 +661,8 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
 /**
  * Generates a new credential in response to a MakeCredential request.
  * Only called when the user has already accepted and identified with the device.
+ *
+ * @return CTAP status code.
  */
 static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
 {
@@ -670,7 +674,9 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
      * us creating more than one credential for the same user/device pair.
      */
     int ret = _verify_exclude_list(&state->req);
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return CTAP2_ERR_CBOR_PARSING;
+    }
 
     /* Update the U2F counter. */
     uint32_t u2f_counter;
@@ -803,7 +809,9 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
     uint8_t* cose_key_buf = auth_data.other;
     cbor_encoder_init(&cose_key, cose_key_buf, sizeof(auth_data.other), 0);
     ret = ctap_add_cose_key(&cose_key, pubkey, pubkey + 32, COSE_ALG_ES256);
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return ret;
+    }
     size_t cose_key_len = cbor_encoder_get_buffer_size(&cose_key, cose_key_buf);
     size_t actual_auth_data_len = sizeof(auth_data) - sizeof(auth_data.other) + cose_key_len;
 
@@ -840,7 +848,9 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
     int attest_sig_size = _encode_der_sig(sigbuf, attest_signature);
 
     ret = _add_attest_statement(&attest_obj, attest_signature, attest_sig_size);
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return ret;
+    }
 
     ret = cbor_encoder_close_container(&encoder, &attest_obj);
     check_ret(ret);
@@ -985,7 +995,9 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     check_ret(ret);
 
     ret = ctap_add_credential_descriptor(&map, key_handle);  // 1
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return ret;
+    }
 
     {
         ret = cbor_encode_int(&map, RESP_authData);  // 2
@@ -1009,7 +1021,9 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     if (user_id_size)
     {
         ret = _encode_user_id(&map, user_id, user_id_size);  // 4
-        check_retr(ret);
+        if (ret != CborNoError) {
+            return ret;
+        }
     }
     ret = cbor_encoder_close_container(encoder, &map);
     return 0;
@@ -1262,14 +1276,18 @@ static int _get_assertion_complete(uint8_t* out_data, size_t* out_len)
     size_t actual_auth_data_size;
     uint8_t auth_data_buf[sizeof(ctap_auth_data_header_t) + 80];
     uint8_t ret = _make_authentication_response(&state->req, auth_data_buf, &actual_auth_data_size);
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return ret;
+    }
 
     /* Encode the resulting assertion in the output buffer. */
     CborEncoder encoder;
     memset(&encoder, 0, sizeof(CborEncoder));
     cbor_encoder_init(&encoder, out_data, USB_DATA_MAX_LEN, 0);
     ret = ctap_end_get_assertion(&encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, state->req.clientDataHash, user_id, user_id_size);
-    check_retr(ret);
+    if (ret != CborNoError) {
+        return ret;
+    }
 
     *out_len = cbor_encoder_get_buffer_size(&encoder, out_data);
 

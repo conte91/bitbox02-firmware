@@ -299,7 +299,7 @@ typedef struct
     uint8_t publicKeyCredentialType;
     int32_t COSEAlgorithmIdentifier;
     uint8_t rk;
-} CTAP_credInfo;
+} ctap_cred_info_t;
 
 typedef struct
 {
@@ -307,7 +307,7 @@ typedef struct
     uint8_t clientDataHash[CLIENT_DATA_HASH_SIZE];
     struct rpId rp;
 
-    CTAP_credInfo credInfo;
+    ctap_cred_info_t credInfo;
 
     CborValue excludeList;
     size_t excludeListSize;
@@ -380,25 +380,8 @@ void ctap_response_init(CTAP_RESPONSE * resp);
 ctap_request_result_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
 ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len);
 
-// Encodes R,S signature to 2 der sequence of two integers.  Sigder must be at least 72 bytes.
-// @return length of der signature
-int ctap_encode_der_sig(uint8_t const * const in_sigbuf, uint8_t * const out_sigder);
-
 // Run ctap related power-up procedures (init pinToken, generate shared secret)
 void ctap_init(void);
-
-// Key storage API
-
-// Return length of key at index.  0 if not exist.
-uint16_t ctap_key_len(uint8_t index);
-
-// See error codes in storage.h
-int8_t ctap_store_key(uint8_t index, uint8_t * key, uint16_t len);
-int8_t ctap_load_key(uint8_t index, uint8_t * key);
-
-#define PIN_TOKEN_SIZE      16
-extern uint8_t PIN_TOKEN[PIN_TOKEN_SIZE];
-extern uint8_t KEY_AGREEMENT_PUB[64];
 
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
 

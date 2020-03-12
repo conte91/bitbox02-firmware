@@ -16,13 +16,6 @@
         } \
     } while(0);
 
-#define check_retr(r) \
-    do { \
-        if ((r) != CborNoError) { \
-            return r; \
-        } \
-    } while(0);
-
 const char* cbor_value_get_type_string(const CborValue *value);
 
 uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encoder, const uint8_t* request, int length);
