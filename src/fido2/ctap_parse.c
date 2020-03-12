@@ -48,7 +48,22 @@
 #define GET_ASSERTION_TAG_PIN_AUTH (0x06)
 #define GET_ASSERTION_TAG_PIN_PROTOCOL (0x07)
 
-static uint8_t _parse_user(CTAP_makeCredential * MC, CborValue * val)
+/**
+ * Parameters contained in the requests.
+ */
+#define PARAM_clientDataHash        (1 << 0)
+#define PARAM_rp                    (1 << 1)
+#define PARAM_user                  (1 << 2)
+#define PARAM_pubKeyCredParams      (1 << 3)
+#define PARAM_excludeList           (1 << 4)
+#define PARAM_extensions            (1 << 5)
+#define PARAM_options               (1 << 6)
+#define PARAM_pinAuth               (1 << 7)
+#define PARAM_pinProtocol           (1 << 8)
+#define PARAM_rpId                  (1 << 9)
+#define PARAM_allowList             (1 << 10)
+
+static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
 {
     size_t sz, map_length;
     uint8_t key[24];
@@ -222,7 +237,7 @@ static int _pub_key_cred_param_supported(uint8_t cred, int32_t alg)
     return  CREDENTIAL_NOT_SUPPORTED;
 }
 
-static uint8_t _parse_pub_key_cred_params(CTAP_makeCredential * MC, CborValue * val)
+static uint8_t _parse_pub_key_cred_params(ctap_make_credential_req_t * MC, CborValue * val)
 {
     size_t arr_length;
     uint8_t cred_type;
@@ -719,7 +734,7 @@ static uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
     return 0;
 }
 
-uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encoder, const uint8_t* request, int length)
+uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder * encoder, const uint8_t* request, int length)
 {
     (void)encoder;
     int ret;
@@ -729,7 +744,7 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
     CborParser parser;
     CborValue it,map;
 
-    memset(MC, 0, sizeof(CTAP_makeCredential));
+    memset(MC, 0, sizeof(*MC));
     MC->up = 0xff;
     ret = cbor_parser_init(request, length, CborValidateCanonicalFormat, &parser, &it);
     check_retr(ret);

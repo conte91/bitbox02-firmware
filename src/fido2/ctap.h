@@ -7,6 +7,7 @@
 #ifndef _CTAP_H
 #define _CTAP_H
 
+#include <crypto/sha2/sha256.h>
 #include <hardfault.h>
 #include <u2f/u2f_keyhandle.h>
 
@@ -62,21 +63,9 @@
 #define RESP_pinToken               0x02
 #define RESP_retries                0x03
 
-#define PARAM_clientDataHash        (1 << 0)
-#define PARAM_rp                    (1 << 1)
-#define PARAM_user                  (1 << 2)
-#define PARAM_pubKeyCredParams      (1 << 3)
-#define PARAM_excludeList           (1 << 4)
-#define PARAM_extensions            (1 << 5)
-#define PARAM_options               (1 << 6)
-#define PARAM_pinAuth               (1 << 7)
-#define PARAM_pinProtocol           (1 << 8)
-#define PARAM_rpId                  (1 << 9)
-#define PARAM_allowList             (1 << 10)
-
 #define MC_requiredMask             (0x0f)
 
-#define CLIENT_DATA_HASH_SIZE       32  //sha256 hash
+#define CLIENT_DATA_HASH_SIZE       (SHA256_LEN)
 #define DOMAIN_NAME_MAX_SIZE        253
 #define RP_NAME_LIMIT               32  // application limit, name parameter isn't needed.
 #define CTAP_USER_ID_MAX_SIZE            64
@@ -257,15 +246,14 @@ typedef struct
     uint8_t data[CTAP_RESPONSE_BUFFER_SIZE];
     uint16_t data_size;
     uint16_t length;
-} CTAP_RESPONSE;
+} ctap_response_t;
 
-struct rpId
-{
+typedef struct {
     uint8_t id[DOMAIN_NAME_MAX_SIZE + 1];     // extra for NULL termination
     /* TODO change to id_size */
     size_t size;
     uint8_t name[RP_NAME_LIMIT];
-};
+} ctap_rp_id_t;
 
 typedef struct
 {
@@ -304,7 +292,7 @@ typedef struct
 typedef struct
 {
     uint32_t paramsParsed;
-    uint8_t clientDataHash[CLIENT_DATA_HASH_SIZE];
+    uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
     struct rpId rp;
 
     ctap_cred_info_t credInfo;
@@ -325,15 +313,15 @@ typedef struct
     int pinProtocol;
     CTAP_extensions extensions;
 
-} CTAP_makeCredential;
+} ctap_make_credential_req_t;
 
 
 
 typedef struct
 {
     uint32_t paramsParsed;
-    uint8_t clientDataHash[CLIENT_DATA_HASH_SIZE];
-    uint8_t clientDataHashPresent;
+    uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
+    uint8_t client_data_hash_present;
 
     struct rpId rp;
 
@@ -375,7 +363,7 @@ typedef struct {
     bool request_completed;
 } ctap_request_result_t;
 
-void ctap_response_init(CTAP_RESPONSE * resp);
+void ctap_response_init(ctap_response_t* resp);
 
 ctap_request_result_t ctap_request(const uint8_t* pkt_raw, int length, uint8_t* out_data, size_t* out_len);
 ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len);

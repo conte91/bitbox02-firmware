@@ -35,15 +35,15 @@
 /**
  * CTAP request codes.
  */
-#define CTAP_MAKE_CREDENTIAL (0x01)
-#define CTAP_GET_ASSERTION   (0x02)
-#define CTAP_CANCEL          (0x03)
-#define CTAP_GET_INFO        (0x04)
-#define CTAP_CLIENT_PIN      (0x06)
-#define CTAP_RESET           (0x07)
-#define GET_NEXT_ASSERTION   (0x08)
-#define CTAP_VENDOR_FIRST    (0x40)
-#define CTAP_VENDOR_LAST     (0xBF)
+#define CTAP_REQ_MAKE_CREDENTIAL (0x01)
+#define CTAP_REQ_GET_ASSERTION   (0x02)
+#define CTAP_REQ_CANCEL          (0x03)
+#define CTAP_REQ_GET_INFO        (0x04)
+#define CTAP_REQ_CLIENT_PIN      (0x06)
+#define CTAP_REQ_RESET           (0x07)
+#define CTAP_REQ_GET_NEXT_ASSERTION   (0x08)
+#define CTAP_REQ_VENDOR_FIRST    (0x40)
+#define CTAP_REQ_VENDOR_LAST     (0xBF)
 
 typedef struct {
     enum {
@@ -329,7 +329,7 @@ static void _get_assertion_allow_cb(bool result, void* param)
     }
 }
 
-static workflow_t* _get_assertion_confirm(struct rpId* rp)
+static workflow_t* _get_assertion_confirm(ctap_rp_id_t* rp)
 {
     char prompt_buf[100];
     size_t prompt_size;
@@ -485,7 +485,7 @@ static uint8_t _add_attest_statement(CborEncoder* map, const uint8_t* signature,
  * @param rp_hash_out Buffer in which to store the computed hash.
  *                    Must be SHA256_LEN bytes wide.
  */
-static void _compute_rpid_hash(struct rpId* rp, uint8_t* rp_hash_out) {
+static void _compute_rpid_hash(ctap_rp_id_t* rp, uint8_t* rp_hash_out) {
     if (wally_sha256(rp->id, rp->size, rp_hash_out, SHA256_LEN) != WALLY_OK) {
         Abort("wally_sha256 failed");
     }
@@ -840,7 +840,7 @@ static int _make_credential_complete(uint8_t* out_data, size_t* out_len)
 
     /* Compute the attestation statement. */
     uint8_t sigbuf[32];
-    bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, state->req.clientDataHash, sigbuf);
+    bool sig_success = _calculate_signature(FIDO2_ATT_PRIV_KEY, (uint8_t*)&auth_data, actual_auth_data_len, state->req.client_data_hash, sigbuf);
     if (!sig_success) {
         return CTAP1_ERR_OTHER;
     }
@@ -978,7 +978,7 @@ static uint8_t _encode_user_id(CborEncoder* map, const uint8_t* user_id, size_t 
  * Note that we don't include any user data as there is no need for that
  * (the user has already been selected on the device).
  */
-static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* clientDataHash, const uint8_t* user_id, size_t user_id_size)
+static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key_handle, uint8_t* auth_data_buf, unsigned int auth_data_buf_sz, uint8_t* privkey, uint8_t* client_data_hash, const uint8_t* user_id, size_t user_id_size)
 {
     int ret;
     uint8_t signature[64];
@@ -1006,7 +1006,7 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
         check_ret(ret);
     }
 
-    bool sig_success = _calculate_signature(privkey, auth_data_buf, auth_data_buf_sz, clientDataHash, signature);
+    bool sig_success = _calculate_signature(privkey, auth_data_buf, auth_data_buf_sz, client_data_hash, signature);
     if (!sig_success) {
         return CTAP1_ERR_OTHER;
     }
@@ -1194,29 +1194,29 @@ static void _get_assertion_free_state(void)
 {
 }
 
-static uint8_t ctap_get_assertion(const uint8_t* request, int length)
+static uint8_t ctap_get_assertion(const uint8_t* data, int length)
 {
-    CTAP_getAssertion GA;
+    CTAP_getAssertion req;
 
-    int ret = ctap_parse_get_assertion(&GA, request, length);
+    int ret = ctap_parse_get_assertion(&req, data, length);
 
     if (ret != 0) {
         return ret;
     }
 
-    if (GA.pinAuthEmpty) {
+    if (req.pinAuthEmpty) {
         bool result = _ask_generic_authorization();
         if (!result) {
             return CTAP2_ERR_OPERATION_DENIED;
         }
         return CTAP2_ERR_PIN_NOT_SET;
     }
-    if (GA.pinAuthPresent) {
+    if (req.pinAuthPresent) {
         /* We don't support pinAuth. */
         return CTAP2_ERR_PIN_AUTH_INVALID;
     }
 
-    if (!GA.rp.size || !GA.clientDataHashPresent) {
+    if (!req.rp.size || !req.client_data_hash_present) {
         /* Both parameters are mandatory. */
         return CTAP2_ERR_MISSING_PARAMETER;
     }
@@ -1227,7 +1227,7 @@ static uint8_t ctap_get_assertion(const uint8_t* request, int length)
      * we don't disclose the existance of credentials before the
      * user has proven his identity (See 5.2, point 7).
      */
-    _get_assertion_init_state(&GA);
+    _get_assertion_init_state(&req);
     workflow_stack_start_workflow(workflow_unlock(_get_assertion_unlock_cb, NULL));
     return CTAP1_ERR_SUCCESS;
 }
@@ -1284,7 +1284,7 @@ static int _get_assertion_complete(uint8_t* out_data, size_t* out_len)
     CborEncoder encoder;
     memset(&encoder, 0, sizeof(CborEncoder));
     cbor_encoder_init(&encoder, out_data, USB_DATA_MAX_LEN, 0);
-    ret = ctap_end_get_assertion(&encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, state->req.clientDataHash, user_id, user_id_size);
+    ret = ctap_end_get_assertion(&encoder, &auth_credential, auth_data_buf, actual_auth_data_size, auth_privkey, state->req.client_data_hash, user_id, user_id_size);
     if (ret != CborNoError) {
         return ret;
     }
@@ -1326,9 +1326,9 @@ static ctap_request_result_t _get_assertion_continue(uint8_t* out_data, size_t* 
     }
 }
 
-void ctap_response_init(CTAP_RESPONSE * resp)
+void ctap_response_init(ctap_response_t* resp)
 {
-    memset(resp, 0, sizeof(CTAP_RESPONSE));
+    memset(resp, 0, sizeof(*resp));
     resp->data_size = CTAP_RESPONSE_BUFFER_SIZE;
 }
 
@@ -1347,7 +1347,7 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
 
     switch(cmd)
     {
-        case CTAP_MAKE_CREDENTIAL:
+        case CTAP_REQ_MAKE_CREDENTIAL:
             result.status = ctap_make_credential(&encoder, pkt_raw, length);
             if (result.status == CTAP1_ERR_SUCCESS) {
                 /* MakeCredential started successfully, don't reply yet. */
@@ -1355,26 +1355,22 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
                 result.request_completed = false;
             }
             break;
-        case CTAP_GET_ASSERTION:
+        case CTAP_REQ_GET_ASSERTION:
             result.status = ctap_get_assertion(pkt_raw, length);
             if (result.status == CTAP1_ERR_SUCCESS) {
                 _state.blocking_op = CTAP_BLOCKING_OP_GET_ASSERTION;
                 result.request_completed = false;
             }
             break;
-        case CTAP_CANCEL:
+        case CTAP_REQ_CANCEL:
             break;
-        case CTAP_GET_INFO:
+        case CTAP_REQ_GET_INFO:
             result.status = ctap_get_info(&encoder);
             *out_len = cbor_encoder_get_buffer_size(&encoder, buf);
             break;
-        case CTAP_CLIENT_PIN:
-            result.status = CTAP2_ERR_NOT_ALLOWED;
-            break;
-        case CTAP_RESET:
-            result.status = CTAP2_ERR_NOT_ALLOWED;
-            break;
-        case GET_NEXT_ASSERTION:
+        case CTAP_REQ_CLIENT_PIN:
+        case CTAP_REQ_RESET:
+        case CTAP_REQ_GET_NEXT_ASSERTION:
             result.status = CTAP2_ERR_NOT_ALLOWED;
             break;
         default:
@@ -1389,7 +1385,6 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, uint8_t*
 
 ctap_request_result_t ctap_retry(uint8_t* out_data, size_t* out_len)
 {
-    //Abort("ctap_retry not implemented yet, should never be called.");
     ctap_request_result_t result = {.status = 0, .request_completed = true};
 
     switch (_state.blocking_op) {
