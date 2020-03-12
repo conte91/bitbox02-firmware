@@ -18,8 +18,8 @@
 
 const char* cbor_value_get_type_string(const CborValue *value);
 
-uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encoder, const uint8_t* request, int length);
-uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t* request, int length);
+uint8_t ctap_parse_make_credential(ctap_make_credential_req_t* MC, CborEncoder * encoder, const uint8_t* request, int length);
+uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t* GA, const uint8_t* request, int length);
 uint8_t ctap_parse_credential_descriptor(CborValue * arr, u2f_keyhandle_t* cred, bool* cred_valid_out);
 
 #endif

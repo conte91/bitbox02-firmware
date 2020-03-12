@@ -51,17 +51,21 @@
 /**
  * Parameters contained in the requests.
  */
-#define PARAM_clientDataHash        (1 << 0)
-#define PARAM_rp                    (1 << 1)
-#define PARAM_user                  (1 << 2)
-#define PARAM_pubKeyCredParams      (1 << 3)
-#define PARAM_excludeList           (1 << 4)
-#define PARAM_extensions            (1 << 5)
-#define PARAM_options               (1 << 6)
-#define PARAM_pinAuth               (1 << 7)
-#define PARAM_pinProtocol           (1 << 8)
-#define PARAM_rpId                  (1 << 9)
-#define PARAM_allowList             (1 << 10)
+#define PARAM_CLIENT_DATA_HASH        (1 << 0)
+#define PARAM_RP                    (1 << 1)
+#define PARAM_USER                  (1 << 2)
+#define PARAM_PUB_KEY_CRED_PARAMS      (1 << 3)
+#define PARAM_EXCLUDE_LIST           (1 << 4)
+#define PARAM_EXTENSIONS            (1 << 5)
+#define PARAM_OPTIONS               (1 << 6)
+#define PARAM_PIN_AUTH               (1 << 7)
+#define PARAM_PIN_PROTOCOL           (1 << 8)
+#define PARAM_RP_ID                  (1 << 9)
+#define PARAM_ALLOW_LIST             (1 << 10)
+
+/** Required parameters for a MakeCredential request. */
+static const uint8_t MAKE_CREDENTIAL_REQUIRED_PARAM_MASK =
+    PARAM_CLIENT_DATA_HASH | PARAM_RP | PARAM_USER | PARAM_PUB_KEY_CRED_PARAMS;
 
 static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
 {
@@ -170,7 +174,7 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
 
     }
 
-    MC->paramsParsed |= PARAM_user;
+    MC->paramsParsed |= PARAM_USER;
 
     return 0;
 }
@@ -279,7 +283,7 @@ static uint8_t _parse_pub_key_cred_params(ctap_make_credential_req_t * MC, CborV
             {
                 MC->credInfo.publicKeyCredentialType = cred_type;
                 MC->credInfo.COSEAlgorithmIdentifier = alg_type;
-                MC->paramsParsed |= PARAM_pubKeyCredParams;
+                MC->paramsParsed |= PARAM_PUB_KEY_CRED_PARAMS;
                 return 0;
             }
         }
@@ -341,7 +345,7 @@ static uint8_t parse_verify_exclude_list(CborValue * val)
     return 0;
 }
 
-static uint8_t _parse_rp_id(struct rpId * rp, CborValue * val)
+static uint8_t _parse_rp_id(ctap_rp_id_t * rp, CborValue * val)
 {
     size_t sz = DOMAIN_NAME_MAX_SIZE;
     if (cbor_value_get_type(val) != CborTextStringType)
@@ -359,7 +363,7 @@ static uint8_t _parse_rp_id(struct rpId * rp, CborValue * val)
     return 0;
 }
 
-static uint8_t _parse_rp(struct rpId * rp, CborValue * val)
+static uint8_t _parse_rp(ctap_rp_id_t * rp, CborValue * val)
 {
     size_t sz, map_length;
     char key[8];
@@ -781,10 +785,10 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
 
             case MAKE_CREDENTIAL_TAG_CLIENT_DATA_HASH:
 
-                ret = _parse_fixed_byte_string(&map, MC->clientDataHash, CLIENT_DATA_HASH_SIZE);
+                ret = _parse_fixed_byte_string(&map, MC->client_data_hash, CLIENT_DATA_HASH_SIZE);
                 if (ret == 0)
                 {
-                    MC->paramsParsed |= PARAM_clientDataHash;
+                    MC->paramsParsed |= PARAM_CLIENT_DATA_HASH;
                 }
 
                 break;
@@ -793,7 +797,7 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 ret = _parse_rp(&MC->rp, &map);
                 if (ret == 0)
                 {
-                    MC->paramsParsed |= PARAM_rp;
+                    MC->paramsParsed |= PARAM_RP;
                 }
 
 
@@ -884,6 +888,9 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
         check_ret(ret);
     }
 
+    if ((MC->paramsParsed & MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) != MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) {
+        return CTAP2_ERR_MISSING_PARAMETER;
+    }
     return 0;
 }
 
@@ -952,7 +959,7 @@ uint8_t ctap_parse_credential_descriptor(CborValue* arr, u2f_keyhandle_t* cred, 
  * Updates GA->creds and GA->credLen.
  * @return CTAP status code (0 is success).
  */
-static uint8_t parse_allow_list(CTAP_getAssertion* GA, CborValue * it)
+static uint8_t parse_allow_list(ctap_get_assertion_req_t* GA, CborValue * it)
 {
     CborValue arr;
     size_t len;
@@ -993,7 +1000,7 @@ static uint8_t parse_allow_list(CTAP_getAssertion* GA, CborValue * it)
     return 0;
 }
 
-uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request, int length)
+uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const uint8_t * request, int length)
 {
     int ret;
     int key;
@@ -1001,7 +1008,7 @@ uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request
     CborParser parser;
     CborValue it,map;
 
-    memset(GA, 0, sizeof(CTAP_getAssertion));
+    memset(GA, 0, sizeof(ctap_get_assertion_req_t));
     GA->up = 0xff;
 
     ret = cbor_parser_init(request, length, CborValidateCanonicalFormat, &parser, &it);
@@ -1038,9 +1045,9 @@ uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, const uint8_t * request
 
             case GET_ASSERTION_TAG_CLIENT_DATA_HASH:
 
-                ret = _parse_fixed_byte_string(&map, GA->clientDataHash, CLIENT_DATA_HASH_SIZE);
+                ret = _parse_fixed_byte_string(&map, GA->client_data_hash, CLIENT_DATA_HASH_SIZE);
                 check_retr(ret);
-                GA->clientDataHashPresent = 1;
+                GA->client_data_hash_present = 1;
 
                 break;
             case GET_ASSERTION_TAG_RPID:

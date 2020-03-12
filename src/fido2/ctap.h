@@ -63,8 +63,6 @@
 #define RESP_pinToken               0x02
 #define RESP_retries                0x03
 
-#define MC_requiredMask             (0x0f)
-
 #define CLIENT_DATA_HASH_SIZE       (SHA256_LEN)
 #define DOMAIN_NAME_MAX_SIZE        253
 #define RP_NAME_LIMIT               32  // application limit, name parameter isn't needed.
@@ -293,7 +291,7 @@ typedef struct
 {
     uint32_t paramsParsed;
     uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
-    struct rpId rp;
+    ctap_rp_id_t rp;
 
     ctap_cred_info_t credInfo;
 
@@ -323,7 +321,7 @@ typedef struct
     uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
     uint8_t client_data_hash_present;
 
-    struct rpId rp;
+    ctap_rp_id_t rp;
 
     uint8_t rk;
     uint8_t uv;
@@ -354,7 +352,7 @@ typedef struct
 
     CTAP_extensions extensions;
 
-} CTAP_getAssertion;
+} ctap_get_assertion_req_t;
 
 typedef struct {
     /** CTAP_* success/error code. */

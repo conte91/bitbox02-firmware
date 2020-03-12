@@ -53,7 +53,7 @@ typedef struct {
         CTAP_MAKE_CREDENTIAL_FINISHED,
         CTAP_MAKE_CREDENTIAL_FAILED,
     } state;
-    CTAP_makeCredential req;
+    ctap_make_credential_req_t req;
 } ctap_make_credential_state_t;
 
 typedef struct {
@@ -64,7 +64,7 @@ typedef struct {
         CTAP_GET_ASSERTION_FAILED,
         CTAP_GET_ASSERTION_FINISHED,
     } state;
-    CTAP_getAssertion req;
+    ctap_get_assertion_req_t req;
 } ctap_get_assertion_state_t;
 
 static struct {
@@ -513,7 +513,7 @@ static bool _confirm_overwrite_credential(void) {
  *             - CTAP2_ERR_CREDENTIAL_EXCLUDED if an excluded key belongs to us;
  *             - other errors if we failed to parse the exclude list.
  */
-static uint8_t _verify_exclude_list(CTAP_makeCredential* req)
+static uint8_t _verify_exclude_list(ctap_make_credential_req_t* req)
 {
     for (size_t i = 0; i < req->excludeListSize; i++) {
         u2f_keyhandle_t excl_cred;
@@ -568,7 +568,7 @@ static void _make_credential_allow_cb(bool result, void* param) {
  * @param req MakeCredential CTAP request.
  * @return Confirmation workflow.
  */
-static workflow_t* _make_credential_allow(CTAP_makeCredential* req)
+static workflow_t* _make_credential_allow(ctap_make_credential_req_t* req)
 {
     char prompt_buf[100];
     size_t prompt_size;
@@ -604,7 +604,7 @@ static void _make_credential_unlock_cb(bool result, void* param) {
     _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_UNLOCKED;
 }
 
-static void _make_credential_init_state(CTAP_makeCredential* req)
+static void _make_credential_init_state(ctap_make_credential_req_t* req)
 {
     _state.data.make_cred.state = CTAP_MAKE_CREDENTIAL_STARTED;
     memcpy(&_state.data.make_cred.req, req, sizeof(*req));
@@ -615,7 +615,7 @@ static void _make_credential_free_state(void)
 }
 
 static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
-    CTAP_makeCredential MC;
+    ctap_make_credential_req_t MC;
     int ret;
 
     ret = ctap_parse_make_credential(&MC,encoder, request, length);
@@ -635,9 +635,6 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* reques
         }
         /* We don't support PIN semantics. */
         return CTAP2_ERR_PIN_NOT_SET;
-    }
-    if ((MC.paramsParsed & MC_requiredMask) != MC_requiredMask) {
-        return CTAP2_ERR_MISSING_PARAMETER;
     }
 
     if (MC.pinAuthPresent) {
@@ -1039,7 +1036,7 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
  * @param chosen_privkey Will be filled with the the private key corresponding to chosen_credential.
  *                       Must be at least HMAC_SHA256_LEN bytes wide.
  */
-static void _authenticate_with_allow_list(CTAP_getAssertion* GA, u2f_keyhandle_t** chosen_credential_out, uint8_t* chosen_privkey)
+static void _authenticate_with_allow_list(ctap_get_assertion_req_t* GA, u2f_keyhandle_t** chosen_credential_out, uint8_t* chosen_privkey)
 {
     /*
      * We can just pick the first credential that we're able to authenticate with.
@@ -1072,7 +1069,7 @@ static void _authenticate_with_allow_list(CTAP_getAssertion* GA, u2f_keyhandle_t
  *                    chosen credential. Must be CTAP_STORAGE_USER_NAME_LIMIT bytes long.
  * @param user_id_size_out Will be filled with the size of user_id.
  */
-static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey, uint8_t* user_id_out, size_t* user_id_size_out)
+static uint8_t _authenticate_with_rk(ctap_get_assertion_req_t* GA, u2f_keyhandle_t* chosen_credential_out, uint8_t* chosen_privkey, uint8_t* user_id_out, size_t* user_id_size_out)
 {
     /*
      * For each credential that we display, save which RK id it corresponds to.
@@ -1157,7 +1154,7 @@ static uint8_t _authenticate_with_rk(CTAP_getAssertion* GA, u2f_keyhandle_t* cho
  * @param auth_data_buf Must be at least sizeof(ctap_auth_data_t) bytes wide.
  * @param data_buf_len_out Will be filled with the actual auth data size.
  */
-static uint8_t _make_authentication_response(CTAP_getAssertion* GA, uint8_t* auth_data_buf, size_t* data_buf_len_out) {
+static uint8_t _make_authentication_response(ctap_get_assertion_req_t* GA, uint8_t* auth_data_buf, size_t* data_buf_len_out) {
     ctap_auth_data_header_t* auth_data_header = (ctap_auth_data_header_t*)auth_data_buf;
 
     auth_data_header->flags = 0;
@@ -1184,7 +1181,7 @@ static uint8_t _make_authentication_response(CTAP_getAssertion* GA, uint8_t* aut
     return CTAP1_ERR_SUCCESS;
 }
 
-static void _get_assertion_init_state(CTAP_getAssertion* req)
+static void _get_assertion_init_state(ctap_get_assertion_req_t* req)
 {
     _state.data.get_assertion.state = CTAP_GET_ASSERTION_STARTED;
     memcpy(&_state.data.get_assertion.req, req, sizeof(*req));
@@ -1196,7 +1193,7 @@ static void _get_assertion_free_state(void)
 
 static uint8_t ctap_get_assertion(const uint8_t* data, int length)
 {
-    CTAP_getAssertion req;
+    ctap_get_assertion_req_t req;
 
     int ret = ctap_parse_get_assertion(&req, data, length);
 
