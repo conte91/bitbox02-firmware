@@ -637,12 +637,16 @@ static void _cmd_cbor(const Packet* in_packet) {
         usb_processing_send_packet(usb_processing_u2f(), &out_packet);
         return;
     }
+    in_buffer_t request_buf = {
+        .data = in_packet->data_addr,
+        .len = in_packet->len
+    };
     buffer_t response_buf = {
         .data = out_packet.data_addr + 1,
         .len = 0,
         .max_len = USB_DATA_MAX_LEN
     };
-    ctap_request_result_t result = ctap_request(in_packet->data_addr, in_packet->len, &response_buf);
+    ctap_request_result_t result = ctap_request(&request_buf, &response_buf);
     if (!result.request_completed) {
         /* Don't send a response yet. */
         return;

@@ -364,7 +364,7 @@ typedef struct {
 
 void ctap_response_init(ctap_response_t* resp);
 
-ctap_request_result_t ctap_request(const uint8_t* pkt_raw, int length, buffer_t* out_buf);
+ctap_request_result_t ctap_request(const in_buffer_t* in_buf, buffer_t* out_buf);
 ctap_request_result_t ctap_retry(buffer_t* out_buf);
 
 // Run ctap related power-up procedures (init pinToken, generate shared secret)

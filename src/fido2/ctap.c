@@ -614,11 +614,11 @@ static void _make_credential_free_state(void)
 {
 }
 
-static uint8_t ctap_make_credential(CborEncoder * encoder, const uint8_t* request, int length) {
+static uint8_t ctap_make_credential(CborEncoder * encoder, const in_buffer_t* in_buffer) {
     ctap_make_credential_req_t MC;
     int ret;
 
-    ret = ctap_parse_make_credential(&MC,encoder, request, length);
+    ret = ctap_parse_make_credential(&MC,encoder, in_buffer);
 
     if (ret != 0) {
         return ret;
@@ -1192,11 +1192,11 @@ static void _get_assertion_free_state(void)
 {
 }
 
-static uint8_t ctap_get_assertion(const uint8_t* data, int length)
+static uint8_t ctap_get_assertion(const in_buffer_t* in_buffer)
 {
     ctap_get_assertion_req_t req;
 
-    int ret = ctap_parse_get_assertion(&req, data, length);
+    int ret = ctap_parse_get_assertion(&req, in_buffer);
 
     if (ret != 0) {
         return ret;
@@ -1256,7 +1256,6 @@ static int _get_assertion_complete(buffer_t* out_buf)
             /* No credential selected (or no credential was known to the device). */
             return CTAP2_ERR_NO_CREDENTIALS;
         }
-        //screen_print_debug("Used allow key\n", 500);
         memcpy(&auth_credential, chosen_credential, sizeof(auth_credential));
     } else {
         // No allowList, so use all matching RK's matching rpId
@@ -1264,11 +1263,6 @@ static int _get_assertion_complete(buffer_t* out_buf)
         if (auth_status != 0) {
             return auth_status;
         }
-        //screen_print_debug("Retrieved key\n", 500);
-        //uint8_t* cred_raw = (uint8_t*)&auth_credential;
-        //screen_sprintf_debug(3000, "KH: %02x%02x",
-        //cred_raw[0], cred_raw[15]
-        //);
     }
 
     size_t actual_auth_data_size;
@@ -1329,13 +1323,16 @@ void ctap_response_init(ctap_response_t* resp)
     resp->data_size = CTAP_RESPONSE_BUFFER_SIZE;
 }
 
-ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, buffer_t* out_buf)
+ctap_request_result_t ctap_request(const in_buffer_t* in_buf, buffer_t* out_buf)
 {
     CborEncoder encoder;
     memset(&encoder,0,sizeof(CborEncoder));
-    uint8_t cmd = *pkt_raw;
-    pkt_raw++;
-    length--;
+
+    uint8_t cmd = *in_buf->data;
+    in_buffer_t in_req_data = {
+        .data = in_buf->data + 1,
+        .len = in_buf->len - 1
+    };
 
     cbor_encoder_init(&encoder, out_buf->data, out_buf->max_len, 0);
     ctap_request_result_t result = {.status = 0, .request_completed = true};
@@ -1343,7 +1340,7 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, buffer_t
     switch(cmd)
     {
         case CTAP_REQ_MAKE_CREDENTIAL:
-            result.status = ctap_make_credential(&encoder, pkt_raw, length);
+            result.status = ctap_make_credential(&encoder, &in_req_data);
             if (result.status == CTAP1_ERR_SUCCESS) {
                 /* MakeCredential started successfully, don't reply yet. */
                 _state.blocking_op = CTAP_BLOCKING_OP_MAKE_CRED;
@@ -1351,7 +1348,7 @@ ctap_request_result_t ctap_request(const uint8_t * pkt_raw, int length, buffer_t
             }
             break;
         case CTAP_REQ_GET_ASSERTION:
-            result.status = ctap_get_assertion(pkt_raw, length);
+            result.status = ctap_get_assertion(&in_req_data);
             if (result.status == CTAP1_ERR_SUCCESS) {
                 _state.blocking_op = CTAP_BLOCKING_OP_GET_ASSERTION;
                 result.request_completed = false;

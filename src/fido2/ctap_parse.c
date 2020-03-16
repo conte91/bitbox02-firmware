@@ -738,7 +738,7 @@ static uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
     return 0;
 }
 
-uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder * encoder, const uint8_t* request, int length)
+uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder * encoder, const in_buffer_t* in_buffer)
 {
     (void)encoder;
     int ret;
@@ -750,7 +750,7 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
 
     memset(MC, 0, sizeof(*MC));
     MC->up = 0xff;
-    ret = cbor_parser_init(request, length, CborValidateCanonicalFormat, &parser, &it);
+    ret = cbor_parser_init(in_buffer->data, in_buffer->len, CborValidateCanonicalFormat, &parser, &it);
     check_retr(ret);
 
     CborType type = cbor_value_get_type(&it);
@@ -1000,7 +1000,7 @@ static uint8_t parse_allow_list(ctap_get_assertion_req_t* GA, CborValue * it)
     return 0;
 }
 
-uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const uint8_t * request, int length)
+uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const in_buffer_t* in_buffer)
 {
     int ret;
     int key;
@@ -1011,7 +1011,7 @@ uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const uint8_t * 
     memset(GA, 0, sizeof(ctap_get_assertion_req_t));
     GA->up = 0xff;
 
-    ret = cbor_parser_init(request, length, CborValidateCanonicalFormat, &parser, &it);
+    ret = cbor_parser_init(in_buffer->data, in_buffer->len, CborValidateCanonicalFormat, &parser, &it);
     check_ret(ret);
 
     CborType type = cbor_value_get_type(&it);
