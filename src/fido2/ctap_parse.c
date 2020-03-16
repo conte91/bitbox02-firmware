@@ -117,12 +117,12 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
             }
 
             sz = CTAP_USER_ID_MAX_SIZE;
-            ret = cbor_value_copy_byte_string(&map, MC->credInfo.user.id, &sz, NULL);
+            ret = cbor_value_copy_byte_string(&map, MC->cred_info.user.id, &sz, NULL);
             if (ret == CborErrorOutOfMemory)
             {
                 return CTAP2_ERR_LIMIT_EXCEEDED;
             }
-            MC->credInfo.user.id_size = sz;
+            MC->cred_info.user.id_size = sz;
             check_ret(ret);
         }
         else if (strcmp((const char *)key, "name") == 0)
@@ -132,12 +132,12 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
             sz = CTAP_USER_NAME_LIMIT;
-            ret = cbor_value_copy_text_string(&map, (char *)MC->credInfo.user.name, &sz, NULL);
+            ret = cbor_value_copy_text_string(&map, (char *)MC->cred_info.user.name, &sz, NULL);
             if (ret != CborErrorOutOfMemory)
             {   // Just truncate the name it's okay
                 check_ret(ret);
             }
-            MC->credInfo.user.name[CTAP_USER_NAME_LIMIT - 1] = 0;
+            MC->cred_info.user.name[CTAP_USER_NAME_LIMIT - 1] = 0;
         }
         else if (strcmp((const char *)key, "displayName") == 0)
         {
@@ -146,12 +146,12 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
             sz = DISPLAY_NAME_LIMIT;
-            ret = cbor_value_copy_text_string(&map, (char *)MC->credInfo.user.displayName, &sz, NULL);
+            ret = cbor_value_copy_text_string(&map, (char *)MC->cred_info.user.displayName, &sz, NULL);
             if (ret != CborErrorOutOfMemory)
             {   // Just truncate the name it's okay
                 check_ret(ret);
             }
-            MC->credInfo.user.displayName[DISPLAY_NAME_LIMIT - 1] = 0;
+            MC->cred_info.user.displayName[DISPLAY_NAME_LIMIT - 1] = 0;
         }
         else if (strcmp((const char *)key, "icon") == 0)
         {
@@ -160,12 +160,12 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
             sz = ICON_LIMIT;
-            ret = cbor_value_copy_text_string(&map, (char *)MC->credInfo.user.icon, &sz, NULL);
+            ret = cbor_value_copy_text_string(&map, (char *)MC->cred_info.user.icon, &sz, NULL);
             if (ret != CborErrorOutOfMemory)
             {   // Just truncate the name it's okay
                 check_ret(ret);
             }
-            MC->credInfo.user.icon[ICON_LIMIT - 1] = 0;
+            MC->cred_info.user.icon[ICON_LIMIT - 1] = 0;
 
         }
 
@@ -174,7 +174,7 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
 
     }
 
-    MC->paramsParsed |= PARAM_USER;
+    MC->param_parsed |= PARAM_USER;
 
     return 0;
 }
@@ -281,9 +281,9 @@ static uint8_t _parse_pub_key_cred_params(ctap_make_credential_req_t * MC, CborV
         {
             if (_pub_key_cred_param_supported(cred_type, alg_type) == CREDENTIAL_IS_SUPPORTED)
             {
-                MC->credInfo.publicKeyCredentialType = cred_type;
-                MC->credInfo.COSEAlgorithmIdentifier = alg_type;
-                MC->paramsParsed |= PARAM_PUB_KEY_CRED_PARAMS;
+                MC->cred_info.publicKeyCredentialType = cred_type;
+                MC->cred_info.COSEAlgorithmIdentifier = alg_type;
+                MC->param_parsed |= PARAM_PUB_KEY_CRED_PARAMS;
                 return 0;
             }
         }
@@ -674,7 +674,7 @@ static uint8_t ctap_parse_hmac_secret(CborValue * val, CTAP_hmac_secret * hs)
 }
 
 
-static uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
+static uint8_t ctap_parse_extensions(CborValue* val, ctap_extensions_t* ext)
 {
     CborValue map;
     size_t sz, map_length;
@@ -788,7 +788,7 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 ret = _parse_fixed_byte_string(&map, MC->client_data_hash, CLIENT_DATA_HASH_SIZE);
                 if (ret == 0)
                 {
-                    MC->paramsParsed |= PARAM_CLIENT_DATA_HASH;
+                    MC->param_parsed |= PARAM_CLIENT_DATA_HASH;
                 }
 
                 break;
@@ -797,7 +797,7 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 ret = _parse_rp(&MC->rp, &map);
                 if (ret == 0)
                 {
-                    MC->paramsParsed |= PARAM_RP;
+                    MC->param_parsed |= PARAM_RP;
                 }
 
 
@@ -818,10 +818,10 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 ret = parse_verify_exclude_list(&map);
                 check_ret(ret);
 
-                ret = cbor_value_enter_container(&map, &MC->excludeList);
+                ret = cbor_value_enter_container(&map, &MC->exclude_list);
                 check_ret(ret);
 
-                ret = cbor_value_get_array_length(&map, &MC->excludeListSize);
+                ret = cbor_value_get_array_length(&map, &MC->exclude_list_size);
                 check_ret(ret);
 
 
@@ -837,7 +837,7 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 break;
 
             case MAKE_CREDENTIAL_TAG_OPTIONS:
-                ret = _parse_options(&map, &MC->credInfo.rk, &MC->uv, &MC->up);
+                ret = _parse_options(&map, &MC->cred_info.rk, &MC->uv, &MC->up);
                 check_retr(ret);
                 break;
             case MAKE_CREDENTIAL_TAG_PIN_AUTH: {
@@ -847,11 +847,11 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                     cbor_value_get_string_length(&map, &pinSize) == CborNoError &&
                     pinSize == 0)
                 {
-                    MC->pinAuthEmpty = 1;
+                    MC->pin_auth_empty = 1;
                     break;
                 }
 
-                ret = _parse_fixed_byte_string(&map, MC->pinAuth, 16);
+                ret = _parse_fixed_byte_string(&map, MC->pin_auth, 16);
                 if (CTAP1_ERR_INVALID_LENGTH != ret)    // damn microsoft
                 {
                     check_retr(ret);
@@ -860,13 +860,13 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
                 {
                     ret = 0;
                 }
-                MC->pinAuthPresent = 1;
+                MC->pin_auth_present = 1;
                 break;
             }
             case MAKE_CREDENTIAL_TAG_PIN_PROTOCOL:
                 if (cbor_value_get_type(&map) == CborIntegerType)
                 {
-                    ret = cbor_value_get_int_checked(&map, &MC->pinProtocol);
+                    ret = cbor_value_get_int_checked(&map, &MC->pin_protocol);
                     check_ret(ret);
                 }
                 else
@@ -888,7 +888,8 @@ uint8_t ctap_parse_make_credential(ctap_make_credential_req_t * MC, CborEncoder 
         check_ret(ret);
     }
 
-    if ((MC->paramsParsed & MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) != MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) {
+    /* Check if all the mandatory parameters are present in the request. */
+    if ((MC->param_parsed & MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) != MAKE_CREDENTIAL_REQUIRED_PARAM_MASK) {
         return CTAP2_ERR_MISSING_PARAMETER;
     }
     return 0;
@@ -956,7 +957,7 @@ uint8_t ctap_parse_credential_descriptor(CborValue* arr, u2f_keyhandle_t* cred, 
 
 /**
  * Parses the list of allowed credentials into GA->creds.
- * Updates GA->creds and GA->credLen.
+ * Updates GA->creds and GA->cred_len.
  * @return CTAP status code (0 is success).
  */
 static uint8_t parse_allow_list(ctap_get_assertion_req_t* GA, CborValue * it)
@@ -977,21 +978,21 @@ static uint8_t parse_allow_list(ctap_get_assertion_req_t* GA, CborValue * it)
     ret = cbor_value_get_array_length(it, &len);
     check_ret(ret);
 
-    GA->credLen = 0;
+    GA->cred_len = 0;
 
     for (i = 0; i < len; i++) {
-        if (GA->credLen >= CTAP_CREDENTIAL_LIST_MAX_SIZE) {
+        if (GA->cred_len >= CTAP_CREDENTIAL_LIST_MAX_SIZE) {
             return CTAP2_ERR_TOO_MANY_ELEMENTS;
         }
 
         /* Check if this is a credential we should consider. */
         bool cred_valid = false;
-        u2f_keyhandle_t* cred = &GA->creds[GA->credLen];
+        u2f_keyhandle_t* cred = &GA->creds[GA->cred_len];
         ret = ctap_parse_credential_descriptor(&arr, cred, &cred_valid);
 
         check_retr(ret);
         if (cred_valid) {
-            GA->credLen += 1;
+            GA->cred_len += 1;
         }
 
         ret = cbor_value_advance(&arr);
@@ -1077,11 +1078,11 @@ uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const in_buffer_
                     cbor_value_get_string_length(&map, &pinSize) == CborNoError &&
                     pinSize == 0)
                 {
-                    GA->pinAuthEmpty = 1;
+                    GA->pin_auth_empty = 1;
                     break;
                 }
 
-                ret = _parse_fixed_byte_string(&map, GA->pinAuth, 16);
+                ret = _parse_fixed_byte_string(&map, GA->pin_auth, 16);
                 if (CTAP1_ERR_INVALID_LENGTH != ret)    // damn microsoft
                 {
                     check_retr(ret);
@@ -1093,14 +1094,14 @@ uint8_t ctap_parse_get_assertion(ctap_get_assertion_req_t * GA, const in_buffer_
                 }
 
                 check_retr(ret);
-                GA->pinAuthPresent = 1;
+                GA->pin_auth_present = 1;
 
                 break;
             }
             case GET_ASSERTION_TAG_PIN_PROTOCOL:
                 if (cbor_value_get_type(&map) == CborIntegerType)
                 {
-                    ret = cbor_value_get_int_checked(&map, &GA->pinProtocol);
+                    ret = cbor_value_get_int_checked(&map, &GA->pin_protocol);
                     check_ret(ret);
                 }
                 else

@@ -45,6 +45,26 @@
 #define CTAP_REQ_VENDOR_FIRST    (0x40)
 #define CTAP_REQ_VENDOR_LAST     (0xBF)
 
+/**
+ * Auth data flags, defined in [WebAuthn] sec. 6.1. Authenticator Data.
+ */
+/**
+ * User is present/not present.
+ */
+#define CTAP_AUTH_DATA_FLAG_USER_PRESENT (1 << 0)
+/**
+ * User is verified/not verified.
+ */
+#define CTAP_AUTH_DATA_FLAG_USER_VERIFIED (1 << 2)
+/**
+ * Indicates whether the authenticator added attested credential data.
+ */
+#define CTAP_AUTH_DATA_FLAG_ATTESTED_CRED_DATA_INCLUDED (1 << 6)
+/**
+ * Indicates if the authenticator data has extensions.
+ */
+#define CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED (1 << 7)
+
 typedef struct {
     enum {
         CTAP_MAKE_CREDENTIAL_STARTED,
@@ -505,7 +525,7 @@ static bool _confirm_overwrite_credential(void) {
 
 /**
  * Check if any of the keys in a MakeCredential's
- * excludeList belong to our device.
+ * exclude_list belong to our device.
  *
  * @param req MakeCredential request to analyze.
  * @return Verification status:
@@ -515,10 +535,10 @@ static bool _confirm_overwrite_credential(void) {
  */
 static uint8_t _verify_exclude_list(ctap_make_credential_req_t* req)
 {
-    for (size_t i = 0; i < req->excludeListSize; i++) {
+    for (size_t i = 0; i < req->exclude_list_size; i++) {
         u2f_keyhandle_t excl_cred;
         bool cred_valid;
-        uint8_t ret = ctap_parse_credential_descriptor(&req->excludeList, &excl_cred, &cred_valid);
+        uint8_t ret = ctap_parse_credential_descriptor(&req->exclude_list, &excl_cred, &cred_valid);
         if (!cred_valid || ret == CTAP2_ERR_CBOR_UNEXPECTED_TYPE) {
             /* Skip credentials that fail to parse. */
             continue;
@@ -535,7 +555,7 @@ static uint8_t _verify_exclude_list(ctap_make_credential_req_t* req)
             return true;
         }
 
-        ret = cbor_value_advance(&req->excludeList);
+        ret = cbor_value_advance(&req->exclude_list);
         check_ret(ret);
     }
     return false;
@@ -625,7 +645,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const in_buffer_t* in
     }
     if (MC.pinAuthEmpty) {
         /*
-         * pinAuth was present and was an empty string.
+         * pin_auth was present and was an empty string.
          * The client is asking us if we support pin
          * (and asks to check for user presence before we move on).
          */
@@ -638,7 +658,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const in_buffer_t* in
     }
 
     if (MC.pinAuthPresent) {
-        /* We don't support pinAuth. */
+        /* We don't support pin_auth. */
         return CTAP2_ERR_PIN_AUTH_INVALID;
     }
 
@@ -705,28 +725,28 @@ static int _make_credential_complete(buffer_t* out_buf)
      * available location. Otherwise, overwrite
      * the existing key (after confirming with the user).
      */
-    if (state->req.credInfo.rk) {
+    if (state->req.cred_info.rk) {
         ctap_resident_key_t rk_to_store;
         memset(&rk_to_store, 0, sizeof(rk_to_store));
         memcpy(&rk_to_store.key_handle, &auth_data.attest.id, sizeof(rk_to_store.key_handle));
         memcpy(&rk_to_store.rp_id_hash, auth_data.head.rpIdHash, sizeof(auth_data.head.rpIdHash));
         _copy_or_truncate((char*)rk_to_store.rp_id, sizeof(rk_to_store.rp_id), (const char*)state->req.rp.id);
-        _copy_or_truncate((char*)rk_to_store.user_name, sizeof(rk_to_store.user_name), (const char*)state->req.credInfo.user.name);
-        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)state->req.credInfo.user.displayName);
+        _copy_or_truncate((char*)rk_to_store.user_name, sizeof(rk_to_store.user_name), (const char*)state->req.cred_info.user.name);
+        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)state->req.cred_info.user.displayName);
         rk_to_store.valid = CTAP_RESIDENT_KEY_VALID;
         rk_to_store.creation_time = u2f_counter;
-        if (state->req.credInfo.user.id_size > CTAP_USER_ID_MAX_SIZE) {
+        if (state->req.cred_info.user.id_size > CTAP_USER_ID_MAX_SIZE) {
             /* We can't store such a big user ID.
              * But we can't even truncate it... So nothing we can do, alas.
              */
             return CTAP2_ERR_REQUEST_TOO_LARGE;
         }
         //screen_sprintf_debug(2000, "UID (%u): %02x%02x",
-        //state->req.credInfo.user.id_size,
-        //state->req.credInfo.user.id[0], state->req.credInfo.user.id[state->req.credInfo.user.id_size - 1]
+        //state->req.cred_info.user.id_size,
+        //state->req.cred_info.user.id[0], state->req.cred_info.user.id[state->req.cred_info.user.id_size - 1]
         //);
-        rk_to_store.user_id_size = state->req.credInfo.user.id_size;
-        memcpy(rk_to_store.user_id, state->req.credInfo.user.id, state->req.credInfo.user.id_size);
+        rk_to_store.user_id_size = state->req.cred_info.user.id_size;
+        memcpy(rk_to_store.user_id, state->req.cred_info.user.id, state->req.cred_info.user.id_size);
 
         int store_location = 0;
         bool must_overwrite = false;
@@ -1044,7 +1064,7 @@ static void _authenticate_with_allow_list(ctap_get_assertion_req_t* GA, u2f_keyh
      * No need to ask the user to select one if many credentials match.
      * See Client to Authenticator Protocol, 5.2, point 9.
      */
-    for (int i = 0; i < GA->credLen; i++) {
+    for (int i = 0; i < GA->cred_len; i++) {
         u2f_keyhandle_t* this_key = GA->creds + i;
         bool key_valid = u2f_keyhandle_verify(GA->rp.id, (uint8_t*)this_key, sizeof(*this_key), chosen_privkey);
         if (key_valid) {
@@ -1210,7 +1230,7 @@ static uint8_t ctap_get_assertion(const in_buffer_t* in_buffer)
         return CTAP2_ERR_PIN_NOT_SET;
     }
     if (req.pinAuthPresent) {
-        /* We don't support pinAuth. */
+        /* We don't support pin_auth. */
         return CTAP2_ERR_PIN_AUTH_INVALID;
     }
 
@@ -1248,7 +1268,7 @@ static int _get_assertion_complete(buffer_t* out_buf)
     uint8_t user_id[CTAP_USER_ID_MAX_SIZE] = {0};
     size_t user_id_size = 0;
 
-    if (state->req.credLen) {
+    if (state->req.cred_len) {
         // allowlist is present -> check all the credentials that were actually generated by us.
         u2f_keyhandle_t* chosen_credential = NULL;
         _authenticate_with_allow_list(&state->req, &chosen_credential, auth_privkey);

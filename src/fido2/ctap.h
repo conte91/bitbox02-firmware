@@ -48,7 +48,7 @@
 #define RESP_aaguid                 0x3
 #define RESP_options                0x4
 #define RESP_maxMsgSize             0x5
-#define RESP_pinProtocols           0x6
+#define RESP_pin_protocols           0x6
 
 #define RESP_fmt                    0x01
 #define RESP_authData               0x02
@@ -278,7 +278,7 @@ typedef struct
 {
     uint8_t hmac_secret_present;
     CTAP_hmac_secret hmac_secret;
-} CTAP_extensions;
+} ctap_extensions_t;
 
 typedef struct
 {
@@ -290,27 +290,27 @@ typedef struct
 
 typedef struct
 {
-    uint32_t paramsParsed;
+    uint32_t param_parsed;
     uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
     ctap_rp_id_t rp;
 
-    ctap_cred_info_t credInfo;
+    ctap_cred_info_t cred_info;
 
-    CborValue excludeList;
-    size_t excludeListSize;
+    CborValue exclude_list;
+    size_t exclude_list_size;
 
     uint8_t uv;
     uint8_t up;
 
-    uint8_t pinAuth[16];
-    uint8_t pinAuthPresent;
-    // pinAuthEmpty is true iff an empty bytestring was provided as pinAuth.
-    // This is exclusive with |pinAuthPresent|. It exists because an empty
-    // pinAuth is a special signal to block for touch. See
+    uint8_t pin_auth[16];
+    uint8_t pin_auth_present;
+    // pin_auth_empty is true iff an empty bytestring was provided as pin_auth.
+    // This is exclusive with |pin_auth_present|. It exists because an empty
+    // pin_auth is a special signal to block for touch. See
     // https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#using-pinToken-in-authenticatorMakeCredential
-    uint8_t pinAuthEmpty;
-    int pinProtocol;
-    CTAP_extensions extensions;
+    uint8_t pin_auth_empty;
+    int pin_protocol;
+    ctap_extensions_t extensions;
 
 } ctap_make_credential_req_t;
 
@@ -318,7 +318,7 @@ typedef struct
 
 typedef struct
 {
-    uint32_t paramsParsed;
+    uint32_t param_parsed;
     uint8_t client_data_hash[CLIENT_DATA_HASH_SIZE];
     uint8_t client_data_hash_present;
 
@@ -328,17 +328,17 @@ typedef struct
     uint8_t uv;
     uint8_t up;
 
-    /* TODO remove pinAuth, we don't use it anyway. */
-    uint8_t pinAuth[16];
-    uint8_t pinAuthPresent;
+    /* TODO remove pin_auth, we don't use it anyway. */
+    uint8_t pin_auth[16];
+    uint8_t pin_auth_present;
     /**
-     * pinAuthEmpty is true iff an empty bytestring was provided as pinAuth.
-     * This is exclusive with |pinAuthPresent|. It exists because an empty
-     * pinAuth is a special signal to block for touch. See
+     * pin_auth_empty is true iff an empty bytestring was provided as pin_auth.
+     * This is exclusive with |pin_auth_present|. It exists because an empty
+     * pin_auth is a special signal to block for touch. See
      * https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#using-pinToken-in-authenticatorGetAssertion
      */
-    uint8_t pinAuthEmpty;
-    int pinProtocol;
+    uint8_t pin_auth_empty;
+    int pin_protocol;
 
     /**
      * List of allowed credential descriptors for authentication.
@@ -347,12 +347,11 @@ typedef struct
      */
     u2f_keyhandle_t creds[CTAP_CREDENTIAL_LIST_MAX_SIZE];
     /** Number of credential descriptors present in this request. */
-    int credLen;
+    int cred_len;
 
     uint8_t allowListPresent;
 
-    CTAP_extensions extensions;
-
+    ctap_extensions_t extensions;
 } ctap_get_assertion_req_t;
 
 typedef struct {
@@ -371,25 +370,5 @@ ctap_request_result_t ctap_retry(buffer_t* out_buf);
 void ctap_init(void);
 
 void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
-
-/**
- * Auth data flags, defined in [WebAuthn] sec. 6.1. Authenticator Data.
- */
-/**
- * User is present/not present.
- */
-#define CTAP_AUTH_DATA_FLAG_USER_PRESENT (1 << 0)
-/**
- * User is verified/not verified.
- */
-#define CTAP_AUTH_DATA_FLAG_USER_VERIFIED (1 << 2)
-/**
- * Indicates whether the authenticator added attested credential data.
- */
-#define CTAP_AUTH_DATA_FLAG_ATTESTED_CRED_DATA_INCLUDED (1 << 6)
-/**
- * Indicates if the authenticator data has extensions.
- */
-#define CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED (1 << 7)
 
 #endif // _CTAP_H
