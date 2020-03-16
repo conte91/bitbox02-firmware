@@ -65,6 +65,30 @@
  */
 #define CTAP_AUTH_DATA_FLAG_EXTENSION_DATA_INCLUDED (1 << 7)
 
+/**
+ * Response tags.
+ */
+#define CTAP_RESP_VERSIONS (0x1)
+#define CTAP_RESP_EXTENSIONS (0x2)
+#define CTAP_RESP_AAGUID (0x3)
+#define CTAP_RESP_OPTIONS (0x4)
+#define CTAP_RESP_MAX_MSG_SIZE (0x5)
+#define CTAP_RESP_PIN_PROTOCOLS (0x6)
+
+#define CTAP_RESP_FMT (0x01)
+#define CTAP_RESP_AUTH_DATA (0x02)
+#define CTAP_RESP_ATT_STMT (0x03)
+
+#define CTAP_RESP_CREDENTIAL (0x01)
+#define CTAP_RESP_SIGNATURE (0x03)
+#define CTAP_RESP_PUBKEY_CREDENTIAL_USER_ENTITY (0x04)
+#define CTAP_RESP_NUM_CREDENTIALS (0x05)
+
+#define CTAP_RESP_KEY_AGREEMENT (0x01)
+#define CTAP_RESP_PIN_TOKEN (0x02)
+#define CTAP_RESP_RETRIES (0x03)
+
+
 typedef struct {
     enum {
         CTAP_MAKE_CREDENTIAL_STARTED,
@@ -113,7 +137,7 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
     ret = cbor_encoder_create_map(encoder, &map, 6);
     check_ret(ret);
     {
-        ret = cbor_encode_uint(&map, RESP_versions);     //  versions key
+        ret = cbor_encode_uint(&map, CTAP_RESP_VERSIONS);     //  versions key
         check_ret(ret);
         {
             ret = cbor_encoder_create_array(&map, &array, 2);
@@ -128,7 +152,7 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
             check_ret(ret);
         }
 
-        ret = cbor_encode_uint(&map, RESP_extensions);
+        ret = cbor_encode_uint(&map, CTAP_RESP_EXTENSIONS);
         check_ret(ret);
         {
             ret = cbor_encoder_create_array(&map, &array, 1);
@@ -141,14 +165,14 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
             check_ret(ret);
         }
 
-        ret = cbor_encode_uint(&map, RESP_aaguid);
+        ret = cbor_encode_uint(&map, CTAP_RESP_AAGUID);
         check_ret(ret);
         {
             ret = cbor_encode_byte_string(&map, aaguid, 16);
             check_ret(ret);
         }
 
-        ret = cbor_encode_uint(&map, RESP_options);
+        ret = cbor_encode_uint(&map, CTAP_RESP_OPTIONS);
         check_ret(ret);
         {
             ret = cbor_encoder_create_map(&map, &options, 4);
@@ -194,14 +218,14 @@ static uint8_t ctap_get_info(CborEncoder * encoder)
             check_ret(ret);
         }
 
-        ret = cbor_encode_uint(&map, RESP_maxMsgSize);
+        ret = cbor_encode_uint(&map, CTAP_RESP_MAX_MSG_SIZE);
         check_ret(ret);
         {
             ret = cbor_encode_int(&map, CTAP_MAX_MESSAGE_SIZE);
             check_ret(ret);
         }
 
-        ret = cbor_encode_uint(&map, RESP_pinProtocols);
+        ret = cbor_encode_uint(&map, CTAP_RESP_PIN_PROTOCOLS);
         check_ret(ret);
         {
             ret = cbor_encoder_create_array(&map, &pins, 1);
@@ -466,7 +490,7 @@ static uint8_t _add_attest_statement(CborEncoder* map, const uint8_t* signature,
     CborEncoder stmtmap;
     CborEncoder x5carr;
 
-    ret = cbor_encode_int(map, RESP_attStmt);
+    ret = cbor_encode_int(map, CTAP_RESP_ATT_STMT);
     check_ret(ret);
     ret = cbor_encoder_create_map(map, &stmtmap, 3);
     check_ret(ret);
@@ -643,7 +667,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const in_buffer_t* in
     if (ret != 0) {
         return ret;
     }
-    if (MC.pinAuthEmpty) {
+    if (MC.pin_auth_empty) {
         /*
          * pin_auth was present and was an empty string.
          * The client is asking us if we support pin
@@ -657,7 +681,7 @@ static uint8_t ctap_make_credential(CborEncoder * encoder, const in_buffer_t* in
         return CTAP2_ERR_PIN_NOT_SET;
     }
 
-    if (MC.pinAuthPresent) {
+    if (MC.pin_auth_present) {
         /* We don't support pin_auth. */
         return CTAP2_ERR_PIN_AUTH_INVALID;
     }
@@ -704,7 +728,7 @@ static int _make_credential_complete(buffer_t* out_buf)
     }
 
     ctap_auth_data_t auth_data;
-    _compute_rpid_hash(&state->req.rp, auth_data.head.rpIdHash);
+    _compute_rpid_hash(&state->req.rp, auth_data.head.rp_id_hash);
 
     /* Generate the key. */
     memset((uint8_t*)&auth_data.attest.id, 0, sizeof(u2f_keyhandle_t));
@@ -729,10 +753,10 @@ static int _make_credential_complete(buffer_t* out_buf)
         ctap_resident_key_t rk_to_store;
         memset(&rk_to_store, 0, sizeof(rk_to_store));
         memcpy(&rk_to_store.key_handle, &auth_data.attest.id, sizeof(rk_to_store.key_handle));
-        memcpy(&rk_to_store.rp_id_hash, auth_data.head.rpIdHash, sizeof(auth_data.head.rpIdHash));
+        memcpy(&rk_to_store.rp_id_hash, auth_data.head.rp_id_hash, sizeof(auth_data.head.rp_id_hash));
         _copy_or_truncate((char*)rk_to_store.rp_id, sizeof(rk_to_store.rp_id), (const char*)state->req.rp.id);
         _copy_or_truncate((char*)rk_to_store.user_name, sizeof(rk_to_store.user_name), (const char*)state->req.cred_info.user.name);
-        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)state->req.cred_info.user.displayName);
+        _copy_or_truncate((char*)rk_to_store.display_name, sizeof(rk_to_store.display_name), (const char*)state->req.cred_info.user.display_name);
         rk_to_store.valid = CTAP_RESIDENT_KEY_VALID;
         rk_to_store.creation_time = u2f_counter;
         if (state->req.cred_info.user.id_size > CTAP_USER_ID_MAX_SIZE) {
@@ -842,7 +866,7 @@ static int _make_credential_complete(buffer_t* out_buf)
      * - attStmt
      */
     {
-        ret = cbor_encode_int(&attest_obj, RESP_fmt);
+        ret = cbor_encode_int(&attest_obj, CTAP_RESP_FMT);
         check_ret(ret);
         ret = cbor_encode_text_stringz(&attest_obj, "packed");
         check_ret(ret);
@@ -850,7 +874,7 @@ static int _make_credential_complete(buffer_t* out_buf)
 
 
     {
-        ret = cbor_encode_int(&attest_obj, RESP_authData);
+        ret = cbor_encode_int(&attest_obj, CTAP_RESP_AUTH_DATA);
         check_ret(ret);
         ret = cbor_encode_byte_string(&attest_obj, (uint8_t*)&auth_data, actual_auth_data_len);
         check_ret(ret);
@@ -912,7 +936,7 @@ static ctap_request_result_t _make_credential_continue(buffer_t* out_buf) {
 static uint8_t ctap_add_credential_descriptor(CborEncoder* map, u2f_keyhandle_t* key_handle)
 {
     CborEncoder desc;
-    int ret = cbor_encode_int(map, RESP_credential);
+    int ret = cbor_encode_int(map, CTAP_RESP_CREDENTIAL);
     check_ret(ret);
 
     ret = cbor_encoder_create_map(map, &desc, 2);
@@ -964,7 +988,7 @@ static int _compare_display_credentials(const void * _a, const void * _b)
 static uint8_t _encode_user_id(CborEncoder* map, const uint8_t* user_id, size_t user_id_size)
 {
     CborEncoder entity;
-    int ret = cbor_encode_int(map, RESP_publicKeyCredentialUserEntity);
+    int ret = cbor_encode_int(map, CTAP_RESP_PUBKEY_CREDENTIAL_USER_ENTITY);
     check_ret(ret);
 
     ret = cbor_encoder_create_map(map, &entity, 1);
@@ -1018,7 +1042,7 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     }
 
     {
-        ret = cbor_encode_int(&map, RESP_authData);  // 2
+        ret = cbor_encode_int(&map, CTAP_RESP_AUTH_DATA);  // 2
         check_ret(ret);
         ret = cbor_encode_byte_string(&map, auth_data_buf, auth_data_buf_sz);
         check_ret(ret);
@@ -1031,7 +1055,7 @@ static uint8_t ctap_end_get_assertion(CborEncoder* encoder, u2f_keyhandle_t* key
     encoded_sig_size = _encode_der_sig(signature, encoded_sig);
 
     {
-        ret = cbor_encode_int(&map, RESP_signature);  // 3
+        ret = cbor_encode_int(&map, CTAP_RESP_SIGNATURE);  // 3
         check_ret(ret);
         ret = cbor_encode_byte_string(&map, encoded_sig, encoded_sig_size);
         check_ret(ret);
@@ -1186,7 +1210,7 @@ static uint8_t _make_authentication_response(ctap_get_assertion_req_t* GA, uint8
         auth_data_header->flags |= CTAP_AUTH_DATA_FLAG_USER_VERIFIED;        // User presence
     }
 
-    _compute_rpid_hash(&GA->rp, auth_data_header->rpIdHash);
+    _compute_rpid_hash(&GA->rp, auth_data_header->rp_id_hash);
 
     /* Update the U2F counter. */
     uint32_t u2f_counter;
@@ -1222,14 +1246,14 @@ static uint8_t ctap_get_assertion(const in_buffer_t* in_buffer)
         return ret;
     }
 
-    if (req.pinAuthEmpty) {
+    if (req.pin_auth_empty) {
         bool result = _ask_generic_authorization();
         if (!result) {
             return CTAP2_ERR_OPERATION_DENIED;
         }
         return CTAP2_ERR_PIN_NOT_SET;
     }
-    if (req.pinAuthPresent) {
+    if (req.pin_auth_present) {
         /* We don't support pin_auth. */
         return CTAP2_ERR_PIN_AUTH_INVALID;
     }

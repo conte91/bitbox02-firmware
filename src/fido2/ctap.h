@@ -43,27 +43,6 @@
 #define EXT_HMAC_SECRET_REQUESTED   0x01
 #define EXT_HMAC_SECRET_PARSED      0x02
 
-#define RESP_versions               0x1
-#define RESP_extensions             0x2
-#define RESP_aaguid                 0x3
-#define RESP_options                0x4
-#define RESP_maxMsgSize             0x5
-#define RESP_pin_protocols           0x6
-
-#define RESP_fmt                    0x01
-#define RESP_authData               0x02
-#define RESP_attStmt                0x03
-
-/* TODO: simone: change case */
-#define RESP_credential             0x01
-#define RESP_signature              0x03
-#define RESP_publicKeyCredentialUserEntity 0x04
-#define RESP_numberOfCredentials    0x05
-
-#define RESP_keyAgreement           0x01
-#define RESP_pinToken               0x02
-#define RESP_retries                0x03
-
 #define CLIENT_DATA_HASH_SIZE       (SHA256_LEN)
 #define DOMAIN_NAME_MAX_SIZE        253
 #define RP_NAME_LIMIT               32  // application limit, name parameter isn't needed.
@@ -137,7 +116,7 @@ typedef struct {
     uint8_t id[CTAP_USER_ID_MAX_SIZE];
     uint8_t id_size;
     uint8_t name[CTAP_USER_NAME_LIMIT];
-    uint8_t displayName[DISPLAY_NAME_LIMIT];
+    uint8_t display_name[DISPLAY_NAME_LIMIT];
     uint8_t icon[ICON_LIMIT];
 } ctap_user_entity_t;
 
@@ -221,7 +200,7 @@ typedef struct __attribute__((packed)) {
  * field. Defined in The WebAuthn specs, 6.1.
  */
 typedef struct __attribute__((packed)) {
-    uint8_t rpIdHash[32];
+    uint8_t rp_id_hash[32];
     uint8_t flags;
     uint32_t signCount;
 } ctap_auth_data_header_t;
@@ -369,6 +348,6 @@ ctap_request_result_t ctap_retry(buffer_t* out_buf);
 // Run ctap related power-up procedures (init pinToken, generate shared secret)
 void ctap_init(void);
 
-void make_auth_tag(uint8_t * rpIdHash, uint8_t * nonce, uint32_t count, uint8_t * tag);
+void make_auth_tag(uint8_t* rp_id_hash, uint8_t* nonce, uint32_t count, uint8_t* tag);
 
 #endif // _CTAP_H

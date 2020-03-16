@@ -50,6 +50,7 @@ set(LIBRARIES
       ${QTOUCHLIB_A}
       ${QTOUCHLIB_B}
       ${QTOUCHLIB_T}
+      tinycbor
       wallycore
       secp256k1
       noiseprotocol

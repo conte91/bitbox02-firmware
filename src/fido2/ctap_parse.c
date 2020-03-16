@@ -146,12 +146,12 @@ static uint8_t _parse_user(ctap_make_credential_req_t * MC, CborValue * val)
                 return CTAP2_ERR_INVALID_CBOR_TYPE;
             }
             sz = DISPLAY_NAME_LIMIT;
-            ret = cbor_value_copy_text_string(&map, (char *)MC->cred_info.user.displayName, &sz, NULL);
+            ret = cbor_value_copy_text_string(&map, (char *)MC->cred_info.user.display_name, &sz, NULL);
             if (ret != CborErrorOutOfMemory)
             {   // Just truncate the name it's okay
                 check_ret(ret);
             }
-            MC->cred_info.user.displayName[DISPLAY_NAME_LIMIT - 1] = 0;
+            MC->cred_info.user.display_name[DISPLAY_NAME_LIMIT - 1] = 0;
         }
         else if (strcmp((const char *)key, "icon") == 0)
         {
